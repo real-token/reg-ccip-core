@@ -1,0 +1,22 @@
+{
+  "name": "reg-ccip-core",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "RealT Inc.",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts-upgradeable": "^4.9.6",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.21.0",
+    "hardhat-deploy": "^0.12.2"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^0.8.0",
+    "@chainlink/contracts-ccip": "^1.2.1"
+  }
+}
