@@ -1,5 +1,7 @@
 import { HardhatUserConfig, task } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "@openzeppelin/hardhat-upgrades";
+import "hardhat-deploy";
 import networks from "./hardhat.networks";
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -27,6 +29,9 @@ const config: HardhatUserConfig = {
         },
       },
     ],
+  },
+  namedAccounts: {
+    deployer: 0,
   },
   networks: networks,
   gasReporter: {
