@@ -10,9 +10,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {IREG} from "../interfaces/IREG.sol";
-import {RegErrors} from "../libraries/RegErrors.sol";
+import {REGErrors} from "../libraries/REGErrors.sol";
 
-contract RealTokenEcosystemGovernance is
+contract REG is
     Initializable,
     ERC20Upgradeable,
     ERC20BurnableUpgradeable,
@@ -84,10 +84,10 @@ contract RealTokenEcosystemGovernance is
         uint256[] calldata amounts
     ) external override onlyRole(MINTER_ROLE) returns (bool) {
         uint256 length = accounts.length;
-        if (length == 0) revert RegErrors.InvalidLength(length);
+        if (length == 0) revert REGErrors.InvalidLength(length);
 
         if (amounts.length != length)
-            revert RegErrors.LengthNotMatch(length, amounts.length);
+            revert REGErrors.LengthNotMatch(length, amounts.length);
 
         for (uint256 i = 0; i < length; ) {
             _mint(accounts[i], amounts[i]);
@@ -105,10 +105,10 @@ contract RealTokenEcosystemGovernance is
     ) external override returns (bool) {
         uint256 length = recipients.length;
         if (length == 0) {
-            revert RegErrors.InvalidLength(length);
+            revert REGErrors.InvalidLength(length);
         }
         if (amounts.length != length) {
-            revert RegErrors.LengthNotMatch(length, amounts.length);
+            revert REGErrors.LengthNotMatch(length, amounts.length);
         }
 
         for (uint256 i = 0; i < length; ) {

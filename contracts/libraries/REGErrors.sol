@@ -6,7 +6,7 @@ pragma solidity ^0.8.0;
  * @author RealT
  * @notice Defines the error messages emitted by the REG contract
  */
-library RegErrors {
+library REGErrors {
     error InvalidAmount(uint256 amount);
     error InvalidLength(uint256 length);
     error LengthNotMatch(uint256 length1, uint256 length2);
