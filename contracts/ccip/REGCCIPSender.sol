@@ -23,21 +23,25 @@ contract REGCCIPSender is
 
     IERC20 private _linkToken;
 
+    IERC20 private _regToken;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    /// @notice Constructor initializes the contract with the router address.
+    /// @notice Initializes the contract.
     /// @param defaultAdmin The address of the default admin.
     /// @param upgrader The address of the upgrader.
     /// @param router The address of the router contract.
-    /// @param link The address of the link contract.
+    /// @param linkToken The address of the LINK Token contract.
+    /// @param regToken The address of the REG Token contract.
     function initialize(
         address defaultAdmin,
         address upgrader,
         address router,
-        address link
+        address linkToken,
+        address regToken
     ) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -46,7 +50,8 @@ contract REGCCIPSender is
         _grantRole(UPGRADER_ROLE, upgrader);
 
         _router = IRouterClient(router);
-        _linkToken = IERC20(link);
+        _linkToken = IERC20(linkToken);
+        _regToken = IERC20(regToken);
     }
 
     /**
@@ -70,6 +75,14 @@ contract REGCCIPSender is
         _;
     }
 
+    /// @dev Modifier that checks a contract address is not 0.
+    /// @param contractAddress The contract address.
+    modifier validateContractAddress(address contractAddress) {
+        if (contractAddress == address(0))
+            revert REGCCIPErrors.InvalidContractAddress();
+        _;
+    }
+
     /// @dev Modifier that checks the receiver address is not 0.
     /// @param receiver The receiver address.
     modifier validateReceiver(address receiver) {
@@ -78,15 +91,86 @@ contract REGCCIPSender is
         _;
     }
 
-    /// @dev Updates the allowlist status of a destination chain for transactions.
-    /// @notice This function can only be called by the owner.
-    /// @param destinationChainSelector The selector of the destination chain to be updated.
-    /// @param allowed The allowlist status to be set for the destination chain.
+    /// @inheritdoc IREGCCIPSender
     function allowlistDestinationChain(
         uint64 destinationChainSelector,
         bool allowed
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         allowlistedChains[destinationChainSelector] = allowed;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function transferTokensPayLINK(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external override returns (bytes32 messageId) {
+        return
+            _transferTokensPayLINK(
+                destinationChainSelector,
+                receiver,
+                token,
+                amount
+            );
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function transferTokensPayLINKWithPermit(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external override returns (bytes32 messageId) {
+        // TODO: add logic
+        return
+            _transferTokensPayLINK(
+                destinationChainSelector,
+                receiver,
+                token,
+                amount
+            );
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function transferTokensPayNative(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external override returns (bytes32 messageId) {
+        return
+            _transferTokensPayNative(
+                destinationChainSelector,
+                receiver,
+                token,
+                amount
+            );
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function transferTokensPayNativeWithPermit(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external override returns (bytes32 messageId) {
+        // TODO: add logic
+        return
+            _transferTokensPayNative(
+                destinationChainSelector,
+                receiver,
+                token,
+                amount
+            );
     }
 
     /// @notice Transfer tokens to receiver on the destination chain.
@@ -99,13 +183,13 @@ contract REGCCIPSender is
     /// @param token token address.
     /// @param amount token amount.
     /// @return messageId The ID of the message that was sent.
-    function transferTokensPayLINK(
+    function _transferTokensPayLINK(
         uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount
     )
-        external
+        private
         onlyRole(DEFAULT_ADMIN_ROLE)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
@@ -163,13 +247,13 @@ contract REGCCIPSender is
     /// @param token token address.
     /// @param amount token amount.
     /// @return messageId The ID of the message that was sent.
-    function transferTokensPayNative(
+    function _transferTokensPayNative(
         uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount
     )
-        external
+        private
         onlyRole(DEFAULT_ADMIN_ROLE)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
@@ -247,15 +331,46 @@ contract REGCCIPSender is
             });
     }
 
-    /// @notice Fallback function to allow the contract to receive Ether.
-    /// @dev This function has no function body, making it a default function for receiving Ether.
-    /// It is automatically called when Ether is transferred to the contract without any data.
-    receive() external payable {}
+    /// @inheritdoc IREGCCIPSender
+    function setRouter(
+        address router
+    )
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        validateContractAddress(router)
+    {
+        _router = IRouterClient(router);
+        emit SetRouter(router);
+    }
 
-    /// @notice Allows the contract owner to withdraw the entire balance of Ether from the contract.
-    /// @dev This function reverts if there are no funds to withdraw or if the transfer fails.
-    /// It should only be callable by the owner of the contract.
-    /// @param beneficiary The address to which the Ether should be transferred.
+    /// @inheritdoc IREGCCIPSender
+    function setLinkToken(
+        address linkToken
+    )
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        validateContractAddress(linkToken)
+    {
+        _linkToken = IERC20(linkToken);
+        emit SetLinkToken(linkToken);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function setRegToken(
+        address regToken
+    )
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        validateContractAddress(regToken)
+    {
+        _regToken = IERC20(regToken);
+        emit SetRegToken(regToken);
+    }
+
+    /// @inheritdoc IREGCCIPSender
     function withdraw(address beneficiary) public onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = address(this).balance;
@@ -275,10 +390,7 @@ contract REGCCIPSender is
             );
     }
 
-    /// @notice Allows the owner of the contract to withdraw all tokens of a specific ERC20 token.
-    /// @dev This function reverts with a 'NothingToWithdraw' error if there are no tokens to withdraw.
-    /// @param beneficiary The address to which the tokens will be sent.
-    /// @param token The contract address of the ERC20 token to be withdrawn.
+    /// @inheritdoc IREGCCIPSender
     function withdrawToken(
         address beneficiary,
         address token
@@ -291,4 +403,9 @@ contract REGCCIPSender is
 
         IERC20(token).transfer(beneficiary, amount);
     }
+
+    /// @notice Fallback function to allow the contract to receive Ether.
+    /// @dev This function has no function body, making it a default function for receiving Ether.
+    /// It is automatically called when Ether is transferred to the contract without any data.
+    receive() external payable {}
 }
