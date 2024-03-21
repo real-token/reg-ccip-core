@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 /**
  * @title REGCCIPErrors library
  * @author RealT
- * @notice Defines the error messages emitted by the REGCCIP contract
+ * @notice Defines the error messages emitted by the REGCCIPSender contract
  */
 library REGCCIPErrors {
     // Custom errors to provide more descriptive revert messages.

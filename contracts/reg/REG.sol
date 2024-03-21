@@ -40,11 +40,11 @@ contract REG is
     }
 
     /**
-     * @notice Initializes the contract.
-     * @param defaultAdmin The address of the default admin.
-     * @param pauser The address of the pauser.
-     * @param minter The address of the minter.
-     * @param upgrader The address of the upgrader.
+     * @notice Initializes the contract
+     * @param defaultAdmin The address of the default admin
+     * @param pauser The address of the pauser
+     * @param minter The address of the minter
+     * @param upgrader The address of the upgrader
      */
     function initialize(
         address defaultAdmin,

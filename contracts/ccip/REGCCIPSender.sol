@@ -10,6 +10,11 @@ import {REGCCIPErrors} from "../libraries/REGCCIPErrors.sol";
 import {IREGCCIPSender} from "../interfaces/IREGCCIPSender.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 
+/**
+ * @title REGCCIPSender
+ * @author RealT
+ * @notice The contract of REG CCIP Sender for cross-chain token transfers
+ */
 contract REGCCIPSender is
     AccessControlUpgradeable,
     UUPSUpgradeable,
@@ -21,7 +26,7 @@ contract REGCCIPSender is
 
     IERC20 private _linkToken;
 
-    // Mapping to keep track of allowlisted destination chains.
+    // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistState) private _allowlistedChains;
 
     mapping(address => AllowlistState) private _allowlistedTokens;
@@ -35,11 +40,11 @@ contract REGCCIPSender is
         _disableInitializers();
     }
 
-    /// @notice Initializes the contract.
-    /// @param defaultAdmin The address of the default admin.
-    /// @param upgrader The address of the upgrader.
-    /// @param router The address of the router contract.
-    /// @param linkToken The address of the LINK Token contract.
+    /// @notice Initializes the contract
+    /// @param defaultAdmin The address of the default admin
+    /// @param upgrader The address of the upgrader
+    /// @param router The address of the router contract
+    /// @param linkToken The address of the LINK Token contract
     function initialize(
         address defaultAdmin,
         address upgrader,
@@ -67,8 +72,17 @@ contract REGCCIPSender is
         // Intentionally left blank
     }
 
-    /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted.
-    /// @param destinationChainSelector The selector of the destination chain.
+    /**
+     * @notice Receive function to allow the contract to receive Ether
+     * @dev This function has no function body, making it a default function for receiving Ether
+     * It is automatically called when Ether is transferred to the contract without any data
+     */
+    receive() external payable {}
+
+    /**
+     * @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted
+     * @param destinationChainSelector The selector of the destination chain
+     */
     modifier onlyAllowlistedChain(uint64 destinationChainSelector) {
         if (!_allowlistedChains[destinationChainSelector].isAllowed)
             revert REGCCIPErrors.DestinationChainNotAllowlisted(
@@ -77,24 +91,30 @@ contract REGCCIPSender is
         _;
     }
 
-    /// @dev Modifier that checks if the token is allowlisted.
-    /// @param token The token address.
+    /**
+     * @dev Modifier that checks if the token is allowlisted
+     * @param token The token address
+     */
     modifier onlyAllowlistedToken(address token) {
         if (!_allowlistedTokens[token].isAllowed)
             revert REGCCIPErrors.TokenNotAllowlisted(token);
         _;
     }
 
-    /// @dev Modifier that checks a contract address is not 0.
-    /// @param contractAddress The contract address.
+    /**
+     * @dev Modifier that checks a contract address is not 0
+     * @param contractAddress The contract address
+     */
     modifier validateContractAddress(address contractAddress) {
         if (contractAddress == address(0))
             revert REGCCIPErrors.InvalidContractAddress();
         _;
     }
 
-    /// @dev Modifier that checks the receiver address is not 0.
-    /// @param receiver The receiver address.
+    /**
+     * @dev Modifier that checks the receiver address is not 0
+     * @param receiver The receiver address
+     */
     modifier validateReceiver(address receiver) {
         if (receiver == address(0))
             revert REGCCIPErrors.InvalidReceiverAddress();
@@ -142,6 +162,66 @@ contract REGCCIPSender is
             tokenState.isInList = true;
         }
         emit AllowlistToken(token, allowed);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function setRouter(
+        address router
+    )
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        validateContractAddress(router)
+    {
+        _router = IRouterClient(router);
+        emit SetRouter(router);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function setLinkToken(
+        address linkToken
+    )
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        validateContractAddress(linkToken)
+    {
+        _linkToken = IERC20(linkToken);
+        emit SetLinkToken(linkToken);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function withdraw(address beneficiary) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Retrieve the balance of this contract
+        uint256 amount = address(this).balance;
+
+        // Revert if there is nothing to withdraw
+        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
+
+        // Attempt to send the funds, capturing the success status and discarding any return data
+        (bool sent, ) = beneficiary.call{value: amount}("");
+
+        // Revert if the send failed, with information about the attempted transfer
+        if (!sent)
+            revert REGCCIPErrors.FailedToWithdrawEth(
+                msg.sender,
+                beneficiary,
+                amount
+            );
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function withdrawToken(
+        address beneficiary,
+        address token
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Retrieve the balance of this contract
+        uint256 amount = IERC20(token).balanceOf(address(this));
+
+        // Revert if there is nothing to withdraw
+        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
+
+        IERC20(token).transfer(beneficiary, amount);
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -234,16 +314,62 @@ contract REGCCIPSender is
             );
     }
 
-    /// @notice Transfer tokens to receiver on the destination chain.
-    /// @notice pay in LINK.
-    /// @notice the token must be in the list of supported tokens.
-    /// @notice This function can only be called by the owner.
-    /// @dev Assumes your contract has sufficient LINK tokens to pay for the fees.
-    /// @param destinationChainSelector The identifier (aka selector) for the destination blockchain.
-    /// @param receiver The address of the recipient on the destination blockchain.
-    /// @param token token address.
-    /// @param amount token amount.
-    /// @return messageId The ID of the message that was sent.
+    /// @inheritdoc IREGCCIPSender
+    function getRouter() external view override returns (address) {
+        return address(_router);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getLinkToken() external view override returns (address) {
+        return address(_linkToken);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getAllowlistedDestinationChains()
+        external
+        view
+        override
+        returns (uint64[] memory)
+    {
+        return _allowlistedChainsList;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getAllowlistedTokens()
+        external
+        view
+        override
+        returns (address[] memory)
+    {
+        return _allowlistedTokensList;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function isAllowlistedDestinationChain(
+        uint64 destinationChainSelector
+    ) external view override returns (bool) {
+        return _allowlistedChains[destinationChainSelector].isAllowed;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function isAllowlistedToken(
+        address token
+    ) external view override returns (bool) {
+        return _allowlistedTokens[token].isAllowed;
+    }
+
+    /**
+     * @notice Transfer tokens to receiver on the destination chain
+     * @notice pay in LINK
+     * @notice the token must be in the list of supported tokens
+     * @notice This function can only be called by the owner
+     * @dev Assumes your contract has sufficient LINK tokens to pay for the fees
+     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
+     * @param receiver The address of the recipient on the destination blockchain
+     * @param token token address
+     * @param amount token amount
+     * @return messageId The ID of the message that was sent
+     */
     function _transferTokensPayLINK(
         uint64 destinationChainSelector,
         address receiver,
@@ -303,16 +429,18 @@ contract REGCCIPSender is
         return messageId;
     }
 
-    /// @notice Transfer tokens to receiver on the destination chain.
-    /// @notice Pay in native gas such as ETH on Ethereum or MATIC on Polgon.
-    /// @notice the token must be in the list of supported tokens.
-    /// @notice This function can only be called by the owner.
-    /// @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon.
-    /// @param destinationChainSelector The identifier (aka selector) for the destination blockchain.
-    /// @param receiver The address of the recipient on the destination blockchain.
-    /// @param token token address.
-    /// @param amount token amount.
-    /// @return messageId The ID of the message that was sent.
+    /**
+     * @notice Transfer tokens to receiver on the destination chain
+     * @notice Pay in native gas such as ETH on Ethereum or MATIC on Polgon
+     * @notice the token must be in the list of supported tokens
+     * @notice This function can only be called by the owner
+     * @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon
+     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
+     * @param receiver The address of the recipient on the destination blockchain
+     * @param token token address
+     * @param amount token amount
+     * @return messageId The ID of the message that was sent
+     */
     function _transferTokensPayNative(
         uint64 destinationChainSelector,
         address receiver,
@@ -368,13 +496,15 @@ contract REGCCIPSender is
         return messageId;
     }
 
-    /// @notice Construct a CCIP message.
-    /// @dev This function will create an EVM2AnyMessage struct with all the necessary information for tokens transfer.
-    /// @param receiver The address of the receiver.
-    /// @param token The token to be transferred.
-    /// @param amount The amount of the token to be transferred.
-    /// @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas.
-    /// @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message.
+    /**
+     * @notice Construct a CCIP message
+     * @dev This function will create an EVM2AnyMessage struct with all the necessary information for tokens transfer
+     * @param receiver The address of the receiver
+     * @param token The token to be transferred
+     * @param amount The amount of the token to be transferred
+     * @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas
+     * @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message
+     */
     function _buildCCIPMessage(
         address receiver,
         address token,
@@ -399,114 +529,5 @@ contract REGCCIPSender is
                 // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees
                 feeToken: feeTokenAddress
             });
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function setRouter(
-        address router
-    )
-        external
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        validateContractAddress(router)
-    {
-        _router = IRouterClient(router);
-        emit SetRouter(router);
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function setLinkToken(
-        address linkToken
-    )
-        external
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        validateContractAddress(linkToken)
-    {
-        _linkToken = IERC20(linkToken);
-        emit SetLinkToken(linkToken);
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function withdraw(address beneficiary) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        // Retrieve the balance of this contract
-        uint256 amount = address(this).balance;
-
-        // Revert if there is nothing to withdraw
-        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
-
-        // Attempt to send the funds, capturing the success status and discarding any return data
-        (bool sent, ) = beneficiary.call{value: amount}("");
-
-        // Revert if the send failed, with information about the attempted transfer
-        if (!sent)
-            revert REGCCIPErrors.FailedToWithdrawEth(
-                msg.sender,
-                beneficiary,
-                amount
-            );
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function withdrawToken(
-        address beneficiary,
-        address token
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        // Retrieve the balance of this contract
-        uint256 amount = IERC20(token).balanceOf(address(this));
-
-        // Revert if there is nothing to withdraw
-        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
-
-        IERC20(token).transfer(beneficiary, amount);
-    }
-
-    /// @notice Fallback function to allow the contract to receive Ether.
-    /// @dev This function has no function body, making it a default function for receiving Ether.
-    /// It is automatically called when Ether is transferred to the contract without any data.
-    receive() external payable {}
-
-    /// @inheritdoc IREGCCIPSender
-    function getRouter() external view override returns (address) {
-        return address(_router);
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function getLinkToken() external view override returns (address) {
-        return address(_linkToken);
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function getAllowlistedDestinationChains()
-        external
-        view
-        override
-        returns (uint64[] memory)
-    {
-        return _allowlistedChainsList;
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function getAllowlistedTokens()
-        external
-        view
-        override
-        returns (address[] memory)
-    {
-        return _allowlistedTokensList;
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function isAllowlistedDestinationChain(
-        uint64 destinationChainSelector
-    ) external view override returns (bool) {
-        return _allowlistedChains[destinationChainSelector].isAllowed;
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function isAllowlistedToken(
-        address token
-    ) external view override returns (bool) {
-        return _allowlistedTokens[token].isAllowed;
     }
 }

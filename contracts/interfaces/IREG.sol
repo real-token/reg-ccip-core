@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 /**
  * @title Interface of the Real Estate Governance Token
  * @author @RealT
- * @notice REG DAO utility token
+ * @notice Real Estate Governance Token
  */
 interface IREG {
     /**
