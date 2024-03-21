@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
@@ -15,7 +14,6 @@ import {REGErrors} from "../libraries/REGErrors.sol";
 contract REG is
     Initializable,
     ERC20Upgradeable,
-    ERC20BurnableUpgradeable,
     ERC20PausableUpgradeable,
     AccessControlUpgradeable,
     ERC20PermitUpgradeable,
@@ -24,8 +22,11 @@ contract REG is
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant MINTER_GOVERNANCE_ROLE =
+        keccak256("MINTER_GOVERNANCE_ROLE");
+    bytes32 public constant MINTER_BRIDGE_ROLE =
+        keccak256("MINTER_BRIDGE_ROLE");
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -39,7 +40,6 @@ contract REG is
         address upgrader
     ) external initializer {
         __ERC20_init("RealToken Ecosystem Governance", "REG");
-        __ERC20Burnable_init();
         __ERC20Pausable_init();
         __AccessControl_init();
         __ERC20Permit_init("RealToken Ecosystem Governance");
@@ -47,21 +47,20 @@ contract REG is
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(PAUSER_ROLE, pauser);
-        _grantRole(MINTER_ROLE, minter);
+        _grantRole(MINTER_GOVERNANCE_ROLE, minter);
         _grantRole(UPGRADER_ROLE, upgrader);
     }
 
+    /**
+     * @notice The admin (with upgrader role) uses this function to update the contract
+     * @dev This function is always needed in future implementation contract versions, otherwise, the contract will not be upgradeable
+     * @param newImplementation is the address of the new implementation contract
+     **/
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {}
-
-    // function _update(
-    //     address from,
-    //     address to,
-    //     uint256 value
-    // ) internal override(ERC20Upgradeable, ERC20PausableUpgradeable) {
-    //     super._update(from, to, value);
-    // }
+    ) internal override onlyRole(UPGRADER_ROLE) {
+        // Intentionally left blank
+    }
 
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
@@ -71,18 +70,39 @@ contract REG is
         _unpause();
     }
 
+    /// @inheritdoc IREG
     function mint(
         address account,
         uint256 amount
-    ) external onlyRole(MINTER_ROLE) returns (bool) {
+    ) external onlyRole(MINTER_BRIDGE_ROLE) returns (bool) {
         _mint(account, amount);
+        emit MintByBridge(account, amount);
         return true;
     }
 
-    function batchMint(
+    function burn(
+        uint256 amount
+    ) external override onlyRole(MINTER_BRIDGE_ROLE) returns (bool) {
+        _burn(_msgSender(), amount);
+        emit BurnByBridge(_msgSender(), amount);
+        return true;
+    }
+
+    /// @inheritdoc IREG
+    function mintByGovernance(
+        address account,
+        uint256 amount
+    ) external override onlyRole(MINTER_GOVERNANCE_ROLE) returns (bool) {
+        _mint(account, amount);
+        emit MintByGovernance(account, amount);
+        return true;
+    }
+
+    /// @inheritdoc IREG
+    function mintBatchByGovernance(
         address[] calldata accounts,
         uint256[] calldata amounts
-    ) external override onlyRole(MINTER_ROLE) returns (bool) {
+    ) external override onlyRole(MINTER_GOVERNANCE_ROLE) returns (bool) {
         uint256 length = accounts.length;
         if (length == 0) revert REGErrors.InvalidLength(length);
 
@@ -91,6 +111,7 @@ contract REG is
 
         for (uint256 i = 0; i < length; ) {
             _mint(accounts[i], amounts[i]);
+            emit MintByGovernance(accounts[i], amounts[i]);
             unchecked {
                 ++i;
             }
@@ -99,7 +120,17 @@ contract REG is
         return true;
     }
 
-    function batchTransfer(
+    /// @inheritdoc IREG
+    function burnByGovernance(
+        uint256 amount
+    ) external override onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+        _burn(address(this), amount);
+        emit BurnByGovernance(address(this), amount);
+        return true;
+    }
+
+    /// @inheritdoc IREG
+    function transferBatch(
         address[] calldata recipients,
         uint256[] calldata amounts
     ) external override returns (bool) {
@@ -120,18 +151,13 @@ contract REG is
         return true;
     }
 
-    function contractBurn(
-        uint256 amount
-    ) external override onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
-        _burn(address(this), amount);
-        return true;
-    }
-
+    /// @inheritdoc IREG
     function recoverERC20(
         address tokenAddress,
         uint256 tokenAmount
     ) external override onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
         IERC20Upgradeable(tokenAddress).safeTransfer(_msgSender(), tokenAmount);
+        emit RecoverByGovernance(tokenAddress, tokenAmount);
         return true;
     }
 
