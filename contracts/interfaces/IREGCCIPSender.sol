@@ -2,6 +2,11 @@
 pragma solidity ^0.8.0;
 
 interface IREGCCIPSender {
+    struct AllowlistState {
+        bool isAllowed;
+        bool isInList;
+    }
+
     /**
      * @dev Emitted when the tokens are transferred to an account on another chain.
      * @param messageId The unique ID of the message.
@@ -23,22 +28,33 @@ interface IREGCCIPSender {
     );
 
     /**
-     * @dev Emitted when the CCIP router address is set.
+     * @dev Emitted when allowlistDestinationChain is called.
+     * @param destinationChainSelector The selector of the destination chain to be updated.
+     * @param allowed The allowlist status to be set for the destination chain.
+     */
+    event AllowlistDestinationChain(
+        uint64 indexed destinationChainSelector,
+        bool indexed allowed
+    );
+
+    /**
+     * @dev Emitted when allowlistDestinationChain is called.
+     * @param token The token address.
+     * @param allowed The allowlist status to be set for the token.
+     */
+    event AllowlistToken(address indexed token, bool indexed allowed);
+
+    /**
+     * @dev Emitted when the CCIP router address is set
      * @param router The CCIP router address.
      */
-    event SetRouter(address router);
+    event SetRouter(address indexed router);
 
     /**
      * @dev Emitted when the LINK token address is set.
      * @param linkToken The LINK token address.
      */
-    event SetLinkToken(address linkToken);
-
-    /**
-     * @dev Emitted when the REG token address is set.
-     * @param regToken The REG token address.
-     */
-    event SetRegToken(address regToken);
+    event SetLinkToken(address indexed linkToken);
 
     /**
      * @dev Updates the allowlist status of a destination chain for transactions.
@@ -53,22 +69,27 @@ interface IREGCCIPSender {
     ) external;
 
     /**
+     * @dev Updates the allowlist status of a token.
+     * @notice This function can only be called by the owner.
+     * - Only callable by the DEFAULT_ADMIN_ROLE
+     * @param token The token address.
+     * @param allowed The allowlist status to be set for the token.
+     */
+    function allowlistToken(address token, bool allowed) external;
+
+    /**
      * @dev Set the CCIP router address.
+     * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param router The CCIP router address.
      */
     function setRouter(address router) external;
 
     /**
      * @dev Set the LINK token address.
+     * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param linkToken The LINK token address.
      */
     function setLinkToken(address linkToken) external;
-
-    /**
-     * @dev Set the REG token address.
-     * @param regToken The REG token address.
-     */
-    function setRegToken(address regToken) external;
 
     /**
      * @notice Transfer tokens to receiver on the destination chain.
@@ -157,7 +178,7 @@ interface IREGCCIPSender {
     /**
      * @notice Allows the contract owner to withdraw the entire balance of Ether from the contract.
      * @dev This function reverts if there are no funds to withdraw or if the transfer fails.
-     * It should only be callable by the owner of the contract.
+     * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param beneficiary The address to which the Ether should be transferred.
      */
     function withdraw(address beneficiary) external;
@@ -165,8 +186,26 @@ interface IREGCCIPSender {
     /**
      * @notice Allows the owner of the contract to withdraw all tokens of a specific ERC20 token.
      * @dev This function reverts with a 'NothingToWithdraw' error if there are no tokens to withdraw.
+     * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param beneficiary The address to which the tokens will be sent.
      * @param token The contract address of the ERC20 token to be withdrawn.
      */
     function withdrawToken(address beneficiary, address token) external;
+
+    function getRouter() external view returns (address);
+
+    function getLinkToken() external view returns (address);
+
+    function getAllowlistedDestinationChains()
+        external
+        view
+        returns (uint64[] memory);
+
+    function getAllowlistedTokens() external view returns (address[] memory);
+
+    function isAllowlistedDestinationChain(
+        uint64 destinationChainSelector
+    ) external view returns (bool);
+
+    function isAllowlistedToken(address token) external view returns (bool);
 }

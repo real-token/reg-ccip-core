@@ -8,6 +8,7 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {IERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/token/ERC20/IERC20.sol";
 import {REGCCIPErrors} from "../libraries/REGCCIPErrors.sol";
 import {IREGCCIPSender} from "../interfaces/IREGCCIPSender.sol";
+import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 
 contract REGCCIPSender is
     AccessControlUpgradeable,
@@ -16,14 +17,18 @@ contract REGCCIPSender is
 {
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
-    // Mapping to keep track of allowlisted destination chains.
-    mapping(uint64 => bool) public allowlistedChains;
-
     IRouterClient private _router;
 
     IERC20 private _linkToken;
 
-    IERC20 private _regToken;
+    // Mapping to keep track of allowlisted destination chains.
+    mapping(uint64 => AllowlistState) private _allowlistedChains;
+
+    mapping(address => AllowlistState) private _allowlistedTokens;
+
+    uint64[] private _allowlistedChainsList;
+
+    address[] private _allowlistedTokensList;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -35,13 +40,11 @@ contract REGCCIPSender is
     /// @param upgrader The address of the upgrader.
     /// @param router The address of the router contract.
     /// @param linkToken The address of the LINK Token contract.
-    /// @param regToken The address of the REG Token contract.
     function initialize(
         address defaultAdmin,
         address upgrader,
         address router,
-        address linkToken,
-        address regToken
+        address linkToken
     ) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -51,7 +54,6 @@ contract REGCCIPSender is
 
         _router = IRouterClient(router);
         _linkToken = IERC20(linkToken);
-        _regToken = IERC20(regToken);
     }
 
     /**
@@ -68,10 +70,18 @@ contract REGCCIPSender is
     /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted.
     /// @param destinationChainSelector The selector of the destination chain.
     modifier onlyAllowlistedChain(uint64 destinationChainSelector) {
-        if (!allowlistedChains[destinationChainSelector])
+        if (!_allowlistedChains[destinationChainSelector].isAllowed)
             revert REGCCIPErrors.DestinationChainNotAllowlisted(
                 destinationChainSelector
             );
+        _;
+    }
+
+    /// @dev Modifier that checks if the token is allowlisted.
+    /// @param token The token address.
+    modifier onlyAllowlistedToken(address token) {
+        if (!_allowlistedTokens[token].isAllowed)
+            revert REGCCIPErrors.TokenNotAllowlisted(token);
         _;
     }
 
@@ -96,7 +106,42 @@ contract REGCCIPSender is
         uint64 destinationChainSelector,
         bool allowed
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        allowlistedChains[destinationChainSelector] = allowed;
+        AllowlistState storage chainState = _allowlistedChains[
+            destinationChainSelector
+        ];
+
+        if (chainState.isAllowed == allowed) {
+            revert REGCCIPErrors.AllowedStateNotChange();
+        }
+
+        chainState.isAllowed = allowed;
+
+        if (allowed && !chainState.isInList) {
+            _allowlistedChainsList.push(destinationChainSelector);
+            chainState.isInList = true;
+        }
+
+        emit AllowlistDestinationChain(destinationChainSelector, allowed);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function allowlistToken(
+        address token,
+        bool allowed
+    ) external validateContractAddress(token) onlyRole(DEFAULT_ADMIN_ROLE) {
+        AllowlistState storage tokenState = _allowlistedTokens[token];
+
+        if (tokenState.isAllowed == allowed) {
+            revert REGCCIPErrors.AllowedStateNotChange();
+        }
+
+        tokenState.isAllowed = allowed;
+
+        if (allowed && !tokenState.isInList) {
+            _allowlistedTokensList.push(token);
+            tokenState.isInList = true;
+        }
+        emit AllowlistToken(token, allowed);
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -126,7 +171,15 @@ contract REGCCIPSender is
         bytes32 r,
         bytes32 s
     ) external override returns (bytes32 messageId) {
-        // TODO: add logic
+        IERC20WithPermit(token).permit(
+            msg.sender,
+            address(this),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
         return
             _transferTokensPayLINK(
                 destinationChainSelector,
@@ -163,7 +216,15 @@ contract REGCCIPSender is
         bytes32 r,
         bytes32 s
     ) external override returns (bytes32 messageId) {
-        // TODO: add logic
+        IERC20WithPermit(token).permit(
+            msg.sender,
+            address(this),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
         return
             _transferTokensPayNative(
                 destinationChainSelector,
@@ -191,6 +252,7 @@ contract REGCCIPSender is
     )
         private
         onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyAllowlistedToken(token)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
         returns (bytes32 messageId)
@@ -218,6 +280,10 @@ contract REGCCIPSender is
 
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
         IERC20(token).approve(address(_router), amount);
+
+        // Transfer LINK token and REG token from the user to this contract
+        _linkToken.transferFrom(msg.sender, address(this), fees);
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         // Send the message through the router and store the returned message ID
         messageId = _router.ccipSend(destinationChainSelector, evm2AnyMessage);
@@ -255,6 +321,7 @@ contract REGCCIPSender is
     )
         private
         onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyAllowlistedToken(token)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
         returns (bytes32 messageId)
@@ -276,6 +343,9 @@ contract REGCCIPSender is
 
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
         IERC20(token).approve(address(_router), amount);
+
+        // Transfer REG token from the user to this contract
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         // Send the message through the router and store the returned message ID
         messageId = _router.ccipSend{value: fees}(
@@ -358,19 +428,6 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
-    function setRegToken(
-        address regToken
-    )
-        external
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        validateContractAddress(regToken)
-    {
-        _regToken = IERC20(regToken);
-        emit SetRegToken(regToken);
-    }
-
-    /// @inheritdoc IREGCCIPSender
     function withdraw(address beneficiary) public onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = address(this).balance;
@@ -408,4 +465,48 @@ contract REGCCIPSender is
     /// @dev This function has no function body, making it a default function for receiving Ether.
     /// It is automatically called when Ether is transferred to the contract without any data.
     receive() external payable {}
+
+    /// @inheritdoc IREGCCIPSender
+    function getRouter() external view override returns (address) {
+        return address(_router);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getLinkToken() external view override returns (address) {
+        return address(_linkToken);
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getAllowlistedDestinationChains()
+        external
+        view
+        override
+        returns (uint64[] memory)
+    {
+        return _allowlistedChainsList;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getAllowlistedTokens()
+        external
+        view
+        override
+        returns (address[] memory)
+    {
+        return _allowlistedTokensList;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function isAllowlistedDestinationChain(
+        uint64 destinationChainSelector
+    ) external view override returns (bool) {
+        return _allowlistedChains[destinationChainSelector].isAllowed;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function isAllowlistedToken(
+        address token
+    ) external view override returns (bool) {
+        return _allowlistedTokens[token].isAllowed;
+    }
 }
