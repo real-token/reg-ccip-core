@@ -3,14 +3,43 @@ pragma solidity ^0.8.0;
 
 /**
  * @title Interface of the Real Estate Governance Token
- * @author @RealToken
+ * @author @RealT
  * @notice REG DAO utility token
  */
 interface IREG {
+    /**
+     * @dev Emitted on mint
+     * @param account The account address that will receive the minted tokens
+     * @param amount The amount of tokens to mint
+     */
     event MintByBridge(address indexed account, uint256 indexed amount);
+
+    /**
+     * @dev Emitted on burn
+     * @param account The account address from which the tokens will be burned
+     * @param amount The amount of tokens to burn
+     */
     event BurnByBridge(address indexed account, uint256 indexed amount);
+
+    /**
+     * @dev Emitted on mintByGovernance
+     * @param account The account address that will receive the minted tokens
+     * @param amount The amount of tokens to mint
+     */
     event MintByGovernance(address indexed account, uint256 indexed amount);
+
+    /**
+     * @dev Emitted on burnByGovernance
+     * @param account The account address from which the tokens will be burned
+     * @param amount The amount of tokens to burn
+     */
     event BurnByGovernance(address indexed account, uint256 indexed amount);
+
+    /**
+     * @dev Emitted on recoverERC20
+     * @param token The token address that will be recovered
+     * @param amount The amount of token to be recovered
+     */
     event RecoverByGovernance(address indexed token, uint256 indexed amount);
 
     /**
@@ -78,12 +107,14 @@ interface IREG {
         uint256[] calldata amounts
     ) external returns (bool);
 
-    /// @notice RecoverERC20, Transfer any ERC20 stored on the contract to a wallet, prevent mistakes
-    /// @dev recoverERC20 function
-    /// - require {DEFAULT_ADMIN_ROLE}
-    /// @param tokenAddress address - token address to transfer
-    /// @param tokenAmount token amount to be transfered
-    /// @return return true on success
+    /**
+     * @notice RecoverERC20, Transfer any ERC20 stored on the contract to a wallet, prevent mistakes
+     * @dev recoverERC20 function
+     * - require {DEFAULT_ADMIN_ROLE}
+     * @param tokenAddress address - token address to transfer
+     * @param tokenAmount token amount to be transfered
+     * @return Return true on success
+     */
     function recoverERC20(
         address tokenAddress,
         uint256 tokenAmount

@@ -11,6 +11,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import {IREG} from "../interfaces/IREG.sol";
 import {REGErrors} from "../libraries/REGErrors.sol";
 
+/**
+ * @title REG
+ * @author RealT
+ * @notice The contract of Real Estate Governance Token
+ */
 contract REG is
     Initializable,
     ERC20Upgradeable,
@@ -21,6 +26,7 @@ contract REG is
     IREG
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant MINTER_GOVERNANCE_ROLE =
@@ -33,6 +39,13 @@ contract REG is
         _disableInitializers();
     }
 
+    /**
+     * @notice Initializes the contract.
+     * @param defaultAdmin The address of the default admin.
+     * @param pauser The address of the pauser.
+     * @param minter The address of the minter.
+     * @param upgrader The address of the upgrader.
+     */
     function initialize(
         address defaultAdmin,
         address pauser,
@@ -62,10 +75,16 @@ contract REG is
         // Intentionally left blank
     }
 
+    /**
+     * @dev Pause the contract if needed
+     **/
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
+    /**
+     * @dev Unpause the contract if needed
+     **/
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
     }
@@ -80,6 +99,7 @@ contract REG is
         return true;
     }
 
+    /// @inheritdoc IREG
     function burn(
         uint256 amount
     ) external override onlyRole(MINTER_BRIDGE_ROLE) returns (bool) {
@@ -161,6 +181,9 @@ contract REG is
         return true;
     }
 
+    /**
+     * @dev Check if the contract is paused before transfer/mint/burn
+     **/
     function _beforeTokenTransfer(
         address from,
         address to,
