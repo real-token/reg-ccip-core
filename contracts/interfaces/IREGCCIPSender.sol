@@ -132,7 +132,7 @@ interface IREGCCIPSender {
         address receiver,
         address token,
         uint256 amount
-    ) external returns (bytes32 messageId);
+    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
@@ -186,7 +186,7 @@ interface IREGCCIPSender {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external returns (bytes32 messageId);
+    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Allows the contract owner to withdraw the entire balance of Ether from the contract

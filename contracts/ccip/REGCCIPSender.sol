@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/token/ERC20/IERC20.sol";
@@ -12,7 +13,7 @@ import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 
 /**
  * @title REGCCIPSender
- * @author RealT
+ * @author RealT, version of RealT CCIP Sender based on Chainlink CCIP
  * @notice The contract of REG CCIP Sender for cross-chain token transfers
  */
 contract REGCCIPSender is
@@ -102,11 +103,11 @@ contract REGCCIPSender is
     }
 
     /**
-     * @dev Modifier that checks a contract address is not 0
+     * @dev Modifier that checks a contract address
      * @param contractAddress The contract address
      */
     modifier validateContractAddress(address contractAddress) {
-        if (contractAddress == address(0))
+        if (!AddressUpgradeable.isContract(contractAddress))
             revert REGCCIPErrors.InvalidContractAddress();
         _;
     }
@@ -275,7 +276,7 @@ contract REGCCIPSender is
         address receiver,
         address token,
         uint256 amount
-    ) external override returns (bytes32 messageId) {
+    ) external payable override returns (bytes32 messageId) {
         return
             _transferTokensPayNative(
                 destinationChainSelector,
@@ -295,7 +296,7 @@ contract REGCCIPSender is
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external override returns (bytes32 messageId) {
+    ) external payable override returns (bytes32 messageId) {
         IERC20WithPermit(token).permit(
             msg.sender,
             address(this),
@@ -377,7 +378,6 @@ contract REGCCIPSender is
         uint256 amount
     )
         private
-        onlyRole(DEFAULT_ADMIN_ROLE)
         onlyAllowlistedToken(token)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
@@ -448,7 +448,6 @@ contract REGCCIPSender is
         uint256 amount
     )
         private
-        onlyRole(DEFAULT_ADMIN_ROLE)
         onlyAllowlistedToken(token)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
