@@ -21,7 +21,7 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.19",
+        version: "0.8.19", // TODO back to 0.8.20 after testing, 0.8.19 required to deploy Chainlink Architecture
         settings: {
           optimizer: {
             enabled: true,
