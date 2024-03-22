@@ -106,33 +106,16 @@ interface IREGCCIPSender {
      * @param receiver The address of the recipient on the destination blockchain
      * @param token token address
      * @param amount token amount
+     * @param feeToken the token address used to pay CCIP fees
      * @return messageId The ID of the message that was sent
      */
-    function transferTokensPayLINK(
+    function transferTokens(
         uint64 destinationChainSelector,
         address receiver,
         address token,
-        uint256 amount
+        uint256 amount,
+        address feeToken
     ) external returns (bytes32 messageId);
-
-    /**
-     * @notice Transfer tokens to receiver on the destination chain
-     * @notice Pay in native gas such as ETH on Ethereum or MATIC on Polygon
-     * @notice the token must be in the list of supported tokens
-     * @notice This function can only be called by the owner
-     * @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon
-     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
-     * @param receiver The address of the recipient on the destination blockchain
-     * @param token token address
-     * @param amount token amount
-     * @return messageId The ID of the message that was sent
-     */
-    function transferTokensPayNative(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
-    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
@@ -144,49 +127,24 @@ interface IREGCCIPSender {
      * @param receiver The address of the recipient on the destination blockchain
      * @param token token address
      * @param amount token amount
+     * @param feeToken the token address used to pay CCIP fees
      * @param deadline The deadline timestamp for the permit signature
      * @param v Signature parameter
      * @param r Signature parameter
      * @param s Signature parameter
      * @return messageId The ID of the message that was sent
      */
-    function transferTokensPayLINKWithPermit(
+    function transferTokensWithPermit(
         uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount,
+        address feeToken,
         uint256 deadline,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external returns (bytes32 messageId);
-
-    /**
-     * @notice Transfer tokens to receiver on the destination chain
-     * @notice Pay in native gas such as ETH on Ethereum or MATIC on Polygon
-     * @notice the token must be in the list of supported tokens
-     * @notice This function can only be called by the owner
-     * @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon
-     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
-     * @param receiver The address of the recipient on the destination blockchain
-     * @param token token address
-     * @param amount token amount
-     * @param deadline The deadline timestamp for the permit signature
-     * @param v Signature parameter
-     * @param r Signature parameter
-     * @param s Signature parameter
-     * @return messageId The ID of the message that was sent
-     */
-    function transferTokensPayNativeWithPermit(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Allows the contract owner to withdraw the entire balance of Ether from the contract
@@ -247,32 +205,18 @@ interface IREGCCIPSender {
     function isAllowlistedToken(address token) external view returns (bool);
 
     /**
-     * @notice Returns the estimated fees of CCIP tx in LINK
+     * @notice Returns the estimated fees of CCIP tx in feeToken (address(0) for native gas)
      * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
      * @param receiver The address of the recipient on the destination blockchain
      * @param token token address
      * @param amount token amount
-     * @return The estimated fees of CCIP tx in LINK
+     * @return The estimated fees of CCIP tx in feeToken (address(0) for native gas)
      */
-    function getEstimatedCCIPFeesInLink(
+    function getCcipFeesEstimation(
         uint64 destinationChainSelector,
         address receiver,
         address token,
-        uint256 amount
-    ) external view returns (uint256);
-
-    /**
-     * @notice Returns the estimated fees of CCIP tx in native
-     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
-     * @param receiver The address of the recipient on the destination blockchain
-     * @param token token address
-     * @param amount token amount
-     * @return The estimated fees of CCIP tx in native
-     */
-    function getEstimatedCCIPFeesInNative(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
+        uint256 amount,
+        address feeToken
     ) external view returns (uint256);
 }

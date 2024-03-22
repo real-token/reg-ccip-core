@@ -15,5 +15,6 @@ library REGCCIPErrors {
     error TokenNotAllowlisted(address token); // Used when the token has not been allowlisted by the contract owner.
     error InvalidReceiverAddress(); // Used when the receiver address is 0.
     error InvalidContractAddress(); // Used when a contract address is set to zero address.
+    error InvalidFeeToken(address feeToken); // Used when the fee token is not LINK or zero address (native)
     error AllowedStateNotChange();
 }

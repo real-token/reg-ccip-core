@@ -230,27 +230,30 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
-    function transferTokensPayLINK(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
-    ) external override returns (bytes32 messageId) {
-        return
-            _transferTokensPayLINK(
-                destinationChainSelector,
-                receiver,
-                token,
-                amount
-            );
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function transferTokensPayLINKWithPermit(
+    function transferTokens(
         uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount,
+        address feeToken
+    ) external override returns (bytes32 messageId) {
+        return
+            _transferTokens(
+                destinationChainSelector,
+                receiver,
+                token,
+                amount,
+                feeToken
+            );
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function transferTokensWithPermit(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount,
+        address feeToken,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -266,56 +269,12 @@ contract REGCCIPSender is
             s
         );
         return
-            _transferTokensPayLINK(
+            _transferTokens(
                 destinationChainSelector,
                 receiver,
                 token,
-                amount
-            );
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function transferTokensPayNative(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
-    ) external payable override returns (bytes32 messageId) {
-        return
-            _transferTokensPayNative(
-                destinationChainSelector,
-                receiver,
-                token,
-                amount
-            );
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function transferTokensPayNativeWithPermit(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external payable override returns (bytes32 messageId) {
-        IERC20WithPermit(token).permit(
-            msg.sender,
-            address(this),
-            amount,
-            deadline,
-            v,
-            r,
-            s
-        );
-        return
-            _transferTokensPayNative(
-                destinationChainSelector,
-                receiver,
-                token,
-                amount
+                amount,
+                feeToken
             );
     }
 
@@ -365,21 +324,23 @@ contract REGCCIPSender is
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
-     * @notice pay in LINK
+     * @notice pay in LINK/Native gas
      * @notice the token must be in the list of supported tokens
      * @notice This function can only be called by the owner
-     * @dev Assumes your contract has sufficient LINK tokens to pay for the fees
+     * @dev Assumes your contract has sufficient LINK/Native to pay for the fees
      * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
      * @param receiver The address of the recipient on the destination blockchain
      * @param token token address
      * @param amount token amount
+     * @param feeToken fee token address (LINK or 0 for native gas)
      * @return messageId The ID of the message that was sent
      */
-    function _transferTokensPayLINK(
+    function _transferTokens(
         uint64 destinationChainSelector,
         address receiver,
         address token,
-        uint256 amount
+        uint256 amount,
+        address feeToken
     )
         private
         onlyAllowlistedToken(token)
@@ -387,103 +348,59 @@ contract REGCCIPSender is
         validateReceiver(receiver)
         returns (bytes32 messageId)
     {
+        // Check if the fee token is LINK or 0 (native gas)
+        if (feeToken != address(0) && feeToken != address(_linkToken)) {
+            revert REGCCIPErrors.InvalidFeeToken(feeToken);
+        }
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         //  address(linkToken) means fees are paid in LINK
         Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
             receiver,
             token,
             amount,
-            address(_linkToken)
+            feeToken
         );
 
         // Get the fee required to send the message
         uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
-
-        if (fees > _linkToken.balanceOf(address(this)))
-            revert REGCCIPErrors.NotEnoughBalance(
-                _linkToken.balanceOf(address(this)),
-                fees
-            );
-
-        // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
-        _linkToken.approve(address(_router), fees);
-
-        // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).approve(address(_router), amount);
-
-        // Transfer LINK token and REG token from the user to this contract
-        _linkToken.safeTransferFrom(msg.sender, address(this), fees);
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
-        // Send the message through the router and store the returned message ID
-        messageId = _router.ccipSend(destinationChainSelector, evm2AnyMessage);
-
-        // Emit an event with message details
-        emit TokensTransferred(
-            messageId,
-            destinationChainSelector,
-            receiver,
-            token,
-            amount,
-            address(_linkToken),
-            fees
-        );
-
-        // Return the message ID
-        return messageId;
-    }
-
-    /**
-     * @notice Transfer tokens to receiver on the destination chain
-     * @notice Pay in native gas such as ETH on Ethereum or MATIC on Polgon
-     * @notice the token must be in the list of supported tokens
-     * @notice This function can only be called by the owner
-     * @dev Assumes your contract has sufficient native gas like ETH on Ethereum or MATIC on Polygon
-     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
-     * @param receiver The address of the recipient on the destination blockchain
-     * @param token token address
-     * @param amount token amount
-     * @return messageId The ID of the message that was sent
-     */
-    function _transferTokensPayNative(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
-    )
-        private
-        onlyAllowlistedToken(token)
-        onlyAllowlistedChain(destinationChainSelector)
-        validateReceiver(receiver)
-        returns (bytes32 messageId)
-    {
-        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        // address(0) means fees are paid in native gas
-        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
-            receiver,
-            token,
-            amount,
-            address(0)
-        );
-
-        // Get the fee required to send the message
-        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
-
-        if (fees > address(this).balance)
-            revert REGCCIPErrors.NotEnoughBalance(address(this).balance, fees);
-
-        // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).approve(address(_router), amount);
 
         // Transfer REG token from the user to this contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
+        IERC20(token).approve(address(_router), amount);
 
-        // Send the message through the router and store the returned message ID
-        // Safe to interact with Chainlink Router as it is a trusted contract
-        messageId = _router.ccipSend{value: fees}(
-            destinationChainSelector,
-            evm2AnyMessage
-        );
+        if (feeToken == address(0)) {
+            if (fees > address(this).balance)
+                revert REGCCIPErrors.NotEnoughBalance(
+                    address(this).balance,
+                    fees
+                );
+
+            // Send the message through the router and store the returned message ID
+            // Safe to interact with Chainlink Router as it is a trusted contract
+            messageId = _router.ccipSend{value: fees}(
+                destinationChainSelector,
+                evm2AnyMessage
+            );
+        } else {
+            IERC20 feeTokenInstance = IERC20(feeToken);
+            if (fees > feeTokenInstance.balanceOf(address(this)))
+                revert REGCCIPErrors.NotEnoughBalance(
+                    feeTokenInstance.balanceOf(address(this)),
+                    fees
+                );
+
+            // Transfer LINK token from the user to this contract
+            feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
+            // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
+            feeTokenInstance.approve(address(_router), fees);
+
+            // Send the message through the router and store the returned message ID
+            messageId = _router.ccipSend(
+                destinationChainSelector,
+                evm2AnyMessage
+            );
+        }
 
         // Emit an event with message details
         emit TokensTransferred(
@@ -492,7 +409,7 @@ contract REGCCIPSender is
             receiver,
             token,
             amount,
-            address(0),
+            feeToken,
             fees
         );
 
@@ -535,47 +452,26 @@ contract REGCCIPSender is
             });
     }
 
-    /// @inheritdoc IREGCCIPSender
-    function getEstimatedCCIPFeesInLink(
+    function getCcipFeesEstimation(
         uint64 destinationChainSelector,
         address receiver,
         address token,
-        uint256 amount
-    ) external view override returns (uint256) {
-        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        //  address(linkToken) means fees are paid in LINK
-        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
-            receiver,
-            token,
-            amount,
-            address(_linkToken)
-        );
-
-        // Get the fee required to send the message
-        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
-
-        return fees;
-    }
-
-    /// @inheritdoc IREGCCIPSender
-    function getEstimatedCCIPFeesInNative(
-        uint64 destinationChainSelector,
-        address receiver,
-        address token,
-        uint256 amount
-    ) external view override returns (uint256) {
+        uint256 amount,
+        address feeToken
+    ) external view returns (uint256) {
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         // address(0) means fees are paid in native gas
         Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
             receiver,
             token,
             amount,
-            address(0)
+            feeToken
         );
 
         // Get the fee required to send the message
         uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
 
+        // Return fees in feeToken
         return fees;
     }
 }
