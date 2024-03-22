@@ -529,4 +529,48 @@ contract REGCCIPSender is
                 feeToken: feeTokenAddress
             });
     }
+
+    /// @inheritdoc IREGCCIPSender
+    function getEstimatedCCIPFeesInLink(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external view override returns (uint256) {
+        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        //  address(linkToken) means fees are paid in LINK
+        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
+            receiver,
+            token,
+            amount,
+            address(_linkToken)
+        );
+
+        // Get the fee required to send the message
+        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
+
+        return fees;
+    }
+
+    /// @inheritdoc IREGCCIPSender
+    function getEstimatedCCIPFeesInNative(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external view override returns (uint256) {
+        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        // address(0) means fees are paid in native gas
+        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
+            receiver,
+            token,
+            amount,
+            address(0)
+        );
+
+        // Get the fee required to send the message
+        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
+
+        return fees;
+    }
 }

@@ -245,4 +245,34 @@ interface IREGCCIPSender {
      * @return Return true if the token is allowlisted
      */
     function isAllowlistedToken(address token) external view returns (bool);
+
+    /**
+     * @notice Returns the estimated fees of CCIP tx in LINK
+     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
+     * @param receiver The address of the recipient on the destination blockchain
+     * @param token token address
+     * @param amount token amount
+     * @return The estimated fees of CCIP tx in LINK
+     */
+    function getEstimatedCCIPFeesInLink(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external view returns (uint256);
+
+    /**
+     * @notice Returns the estimated fees of CCIP tx in native
+     * @param destinationChainSelector The identifier (aka selector) for the destination blockchain
+     * @param receiver The address of the recipient on the destination blockchain
+     * @param token token address
+     * @param amount token amount
+     * @return The estimated fees of CCIP tx in native
+     */
+    function getEstimatedCCIPFeesInNative(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount
+    ) external view returns (uint256);
 }
