@@ -15,18 +15,11 @@ const func: DeployFunction = async function ({
     from: deployer,
     args: [
       [
-        [
-          [deployer, admin, moderator, 2, 2],
-          // [moderator, moderator, moderator, 2, 2],
-        ], // voters
+        [[deployer, admin, moderator, 2, 2]], // voters
         1, // blessWeightThreshold
         1, // curseWeightThreshold
       ],
     ],
-    // [deployer], // voters
-    // 1, // blessWeightThreshold
-    // 1, // curseWeightThreshold
-
     log: true,
   });
   console.log("ARM deployed to:", arm.address);

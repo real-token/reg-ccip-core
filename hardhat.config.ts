@@ -25,7 +25,7 @@ const config: HardhatUserConfig = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 20000,
+            runs: 10000, // TODO back to 100000 after testing (10000 required to deploy Chainlink OnRamp)
           },
         },
       },
