@@ -4,9 +4,10 @@ pragma solidity ^0.8.0;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
-import {IERC20} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/token/ERC20/IERC20.sol";
 import {REGCCIPErrors} from "../libraries/REGCCIPErrors.sol";
 import {IREGCCIPSender} from "../interfaces/IREGCCIPSender.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
@@ -21,6 +22,8 @@ contract REGCCIPSender is
     UUPSUpgradeable,
     IREGCCIPSender
 {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     IRouterClient private _router;
@@ -200,6 +203,7 @@ contract REGCCIPSender is
         if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
 
         // Attempt to send the funds, capturing the success status and discarding any return data
+        // This is considered safe because the beneficiary is chosen by admin
         (bool sent, ) = beneficiary.call{value: amount}("");
 
         // Revert if the send failed, with information about the attempted transfer
@@ -222,7 +226,7 @@ contract REGCCIPSender is
         // Revert if there is nothing to withdraw
         if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
 
-        IERC20(token).transfer(beneficiary, amount);
+        IERC20(token).safeTransfer(beneficiary, amount);
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -408,8 +412,8 @@ contract REGCCIPSender is
         IERC20(token).approve(address(_router), amount);
 
         // Transfer LINK token and REG token from the user to this contract
-        _linkToken.transferFrom(msg.sender, address(this), fees);
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        _linkToken.safeTransferFrom(msg.sender, address(this), fees);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         // Send the message through the router and store the returned message ID
         messageId = _router.ccipSend(destinationChainSelector, evm2AnyMessage);
@@ -472,9 +476,10 @@ contract REGCCIPSender is
         IERC20(token).approve(address(_router), amount);
 
         // Transfer REG token from the user to this contract
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         // Send the message through the router and store the returned message ID
+        // Safe to interact with Chainlink Router as it is a trusted contract
         messageId = _router.ccipSend{value: fees}(
             destinationChainSelector,
             evm2AnyMessage
