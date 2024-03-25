@@ -32,6 +32,9 @@ contract REGCCIPSender is
     address private constant _linkToken =
         0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK token address on Ethereum Mainnet
 
+    address private constant _wrappedNativeToken =
+        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum Mainnet
+
     // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistState) private _allowlistedChains;
 
@@ -277,6 +280,11 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
+    function getWrappedNativeToken() external pure override returns (address) {
+        return _wrappedNativeToken;
+    }
+
+    /// @inheritdoc IREGCCIPSender
     function getAllowlistedDestinationChains()
         external
         view
@@ -336,8 +344,12 @@ contract REGCCIPSender is
         validateReceiver(receiver)
         returns (bytes32 messageId)
     {
-        // Check if the fee token is LINK or 0 (native gas)
-        if (feeToken != address(0) && feeToken != _linkToken) {
+        // Check if the fee token is LINK or 0 (native gas) or wrapped native token
+        if (
+            feeToken != address(0) &&
+            feeToken != _linkToken &&
+            feeToken != _wrappedNativeToken
+        ) {
             revert REGCCIPErrors.InvalidFeeToken(feeToken);
         }
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
