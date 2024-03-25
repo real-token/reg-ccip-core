@@ -54,7 +54,7 @@ contract REGCCIPSender is
         address upgrader,
         address router,
         address linkToken
-    ) public initializer {
+    ) external initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
@@ -195,7 +195,9 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
-    function withdraw(address beneficiary) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdraw(
+        address beneficiary
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = address(this).balance;
 
@@ -219,7 +221,7 @@ contract REGCCIPSender is
     function withdrawToken(
         address beneficiary,
         address token
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = IERC20(token).balanceOf(address(this));
 
