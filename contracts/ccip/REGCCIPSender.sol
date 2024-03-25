@@ -367,7 +367,7 @@ contract REGCCIPSender is
         // Transfer REG token from the user to this contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).approve(address(_router), amount);
+        IERC20(token).safeApprove(address(_router), amount);
 
         if (feeToken == address(0)) {
             if (fees > address(this).balance)
@@ -393,7 +393,7 @@ contract REGCCIPSender is
             // Transfer LINK token from the user to this contract
             feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
             // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
-            feeTokenInstance.approve(address(_router), fees);
+            feeTokenInstance.safeApprove(address(_router), fees);
 
             // Send the message through the router and store the returned message ID
             messageId = _router.ccipSend(
