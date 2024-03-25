@@ -29,7 +29,8 @@ contract REGCCIPSender is
 
     IRouterClient private _router;
 
-    IERC20 private _linkToken;
+    address private constant _linkToken =
+        0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK token address on Ethereum Mainnet
 
     // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistState) private _allowlistedChains;
@@ -49,12 +50,10 @@ contract REGCCIPSender is
     /// @param defaultAdmin The address of the default admin
     /// @param upgrader The address of the upgrader
     /// @param router The address of the router contract
-    /// @param linkToken The address of the LINK Token contract
     function initialize(
         address defaultAdmin,
         address upgrader,
-        address router,
-        address linkToken
+        address router
     ) external initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -63,7 +62,6 @@ contract REGCCIPSender is
         _grantRole(UPGRADER_ROLE, upgrader);
 
         _router = IRouterClient(router);
-        _linkToken = IERC20(linkToken);
     }
 
     /**
@@ -183,19 +181,6 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
-    function setLinkToken(
-        address linkToken
-    )
-        external
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        validateContractAddress(linkToken)
-    {
-        _linkToken = IERC20(linkToken);
-        emit SetLinkToken(linkToken);
-    }
-
-    /// @inheritdoc IREGCCIPSender
     function withdraw(
         address beneficiary
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -287,8 +272,8 @@ contract REGCCIPSender is
     }
 
     /// @inheritdoc IREGCCIPSender
-    function getLinkToken() external view override returns (address) {
-        return address(_linkToken);
+    function getLinkToken() external pure override returns (address) {
+        return _linkToken;
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -352,7 +337,7 @@ contract REGCCIPSender is
         returns (bytes32 messageId)
     {
         // Check if the fee token is LINK or 0 (native gas)
-        if (feeToken != address(0) && feeToken != address(_linkToken)) {
+        if (feeToken != address(0) && feeToken != _linkToken) {
             revert REGCCIPErrors.InvalidFeeToken(feeToken);
         }
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message

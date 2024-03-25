@@ -56,12 +56,6 @@ interface IREGCCIPSender {
     event SetRouter(address indexed router);
 
     /**
-     * @dev Emitted when the LINK token address is set
-     * @param linkToken The LINK token address
-     */
-    event SetLinkToken(address indexed linkToken);
-
-    /**
      * @dev Updates the allowlist status of a destination chain for transactions
      * @notice This function can only be called by the owner
      * - Only callable by the DEFAULT_ADMIN_ROLE
@@ -88,13 +82,6 @@ interface IREGCCIPSender {
      * @param router The CCIP router address
      */
     function setRouter(address router) external;
-
-    /**
-     * @dev Set the LINK token address
-     * - Only callable by the DEFAULT_ADMIN_ROLE
-     * @param linkToken The LINK token address
-     */
-    function setLinkToken(address linkToken) external;
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
