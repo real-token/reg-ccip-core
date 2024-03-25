@@ -27,12 +27,14 @@ contract REG is
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant PAUSER_ROLE =
+        0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a; // = keccak256("PAUSER_ROLE")
+    bytes32 public constant UPGRADER_ROLE =
+        0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3; // = keccak256("UPGRADER_ROLE")
     bytes32 public constant MINTER_GOVERNANCE_ROLE =
-        keccak256("MINTER_GOVERNANCE_ROLE");
+        0x54fd3c12c8b3fc99211f3f953b8d8233c4cdca02cfeedbead260add43c0f1bd5; // = keccak256("MINTER_GOVERNANCE_ROLE")
     bytes32 public constant MINTER_BRIDGE_ROLE =
-        keccak256("MINTER_BRIDGE_ROLE");
+        0x0dc18c621ac7c12ef6a5f7771b48b18abf4dd7238e67a277b031c58b2c7b7c09; // = keccak256("MINTER_BRIDGE_ROLE")
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
