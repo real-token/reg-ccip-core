@@ -1,1 +1,14 @@
+import { keccak256, toUtf8Bytes } from "ethers";
+
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+export const DEFAULT_ADMIN_ROLE =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+export const UPGRADER_ROLE = keccak256(toUtf8Bytes("UPGRADER_ROLE"));
+export const PAUSER_ROLE = keccak256(toUtf8Bytes("PAUSER_ROLE"));
+export const MINTER_GOVERNANCE_ROLE = keccak256(
+  toUtf8Bytes("MINTER_GOVERNANCE_ROLE")
+);
+export const MINTER_BRIDGE_ROLE = keccak256(toUtf8Bytes("MINTER_BRIDGE_ROLE"));
+
+export const MODERATOR_ROLE = keccak256(toUtf8Bytes("MODERATOR_ROLE"));
