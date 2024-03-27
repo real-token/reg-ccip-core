@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-deploy";
 import "hardhat-dependency-compiler";
+import "hardhat-contract-sizer";
 import networks from "./hardhat.networks";
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -48,6 +49,9 @@ const config: HardhatUserConfig = {
     deployer: 0,
     admin: 1,
     moderator: 2,
+		user1: 3,
+		user2: 4,
+		user3: 5
   },
   networks: networks,
   gasReporter: {
@@ -55,6 +59,11 @@ const config: HardhatUserConfig = {
     gasPrice: 20,
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+  },
+  contractSizer: {
+    alphaSort: true,
+    runOnCompile: false,
+    disambiguatePaths: false,
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,

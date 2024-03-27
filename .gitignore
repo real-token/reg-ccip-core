@@ -13,3 +13,9 @@ types
 # solidity-coverage files
 /coverage
 /coverage.json
+
+# deployment files for hardhat-deploy on localhost
+/deployments/localhost
+
+# echidna json exports
+/crytic-export
