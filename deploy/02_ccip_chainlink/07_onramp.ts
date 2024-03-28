@@ -1,5 +1,9 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
+import {
+  CHAIN_SELECTOR_MUMBAI,
+  CHAIN_SELECTOR_SEPOLIA,
+} from "../../helpers/constants";
 
 const func: DeployFunction = async function ({
   getNamedAccounts,
@@ -22,8 +26,8 @@ const func: DeployFunction = async function ({
       /// StaticConfig
       [
         linkToken, // address linkToken; // Link token address
-        "16015286601757825753", // uint64 chainSelector; // Source chainSelector (Sepolia)
-        "12532609583862916517", // uint64 destChainSelector; // Destination chainSelector (Mumbai)
+        CHAIN_SELECTOR_SEPOLIA, // uint64 chainSelector; // Source chainSelector (Sepolia)
+        CHAIN_SELECTOR_MUMBAI, // uint64 destChainSelector; // Destination chainSelector (Mumbai)
         "200000", // uint64 defaultTxGasLimit; // Default gas limit for a tx
         "20000000000000000000000", // uint96 maxNopFeesJuels; // Max nop fee balance onramp can have
         "0x0000000000000000000000000000000000000000", // address prevOnRamp; // Address of previous-version OnRamp

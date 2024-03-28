@@ -17,7 +17,11 @@ const func: DeployFunction = async function ({
 
   const tokenPool = await deploy("BurnMintTokenPool", {
     from: deployer,
-    args: [regArtifact.address, [deployer], armProxyArtifact.address],
+    args: [
+      regArtifact.address, // token address to pool
+      [], // allowlist (permissioned) or empty for all
+      armProxyArtifact.address, // arm proxy address
+    ],
     log: true,
   });
   console.log("BurnMintTokenPool deployed to:", tokenPool.address);

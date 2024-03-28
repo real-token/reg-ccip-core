@@ -10,7 +10,7 @@ const func: DeployFunction = async function ({
   const { deploy, save } = deployments;
   const { deployer } = await getNamedAccounts();
 
-  const armProxyArtifact = await deployments.get("LinkToken");
+  const armProxyArtifact = await deployments.get("ARMProxy");
   console.log("ARMProxy instance at artifact:", armProxyArtifact.address);
 
   const router = await deploy("Router", {
@@ -19,6 +19,7 @@ const func: DeployFunction = async function ({
     log: true,
   });
   console.log("Router deployed to:", router.address);
+  // TODO applyRampUpdates to whitelist destination chains with on/offRamp addresses
 };
 
 func.tags = ["Router"];

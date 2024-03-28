@@ -48,7 +48,8 @@ const config: HardhatUserConfig = {
   namedAccounts: {
     deployer: 0,
     admin: 1,
-    bridge: 2,
+    moderator: 2,
+    bridge: 3,
   },
   networks: networks,
   gasReporter: {

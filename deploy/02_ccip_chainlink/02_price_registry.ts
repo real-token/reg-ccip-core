@@ -17,7 +17,7 @@ const func: DeployFunction = async function ({
     args: [
       [deployer], // priceUpdaters
       [linkTokenArtifact.address], // feeTokens
-      1, // stalenessThreshold
+      86400, // stalenessThreshold
     ],
     log: true,
   });

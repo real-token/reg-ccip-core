@@ -28,14 +28,10 @@ async function setup() {
     reg: await ethers.getContractAt("REG", REG.address),
   };
 
-  // we get the tokenOwner
+  // Get the named and unnamed accounts
   const { deployer, admin, bridge } = await getNamedAccounts();
-
-  // get fet unnammedAccounts (which are basically all accounts not named in the config, useful for tests as you can be sure they do not have been given token for example)
-  // we then use the utilities function to generate user object/
-  // These object allow you to write things like `users[0].Token.transfer(....)`
   const users = await setupUsers(await getUnnamedAccounts(), contracts);
-  // finally we return the whole object (including the tokenOwner setup as a User object)
+
   return {
     ...contracts,
     users,
@@ -84,7 +80,7 @@ describe("REG", function () {
           .toLowerCase()} is missing role ${PAUSER_ROLE}`
       );
 
-      expect(await deployer.reg.pause()).to.emit(reg, "Paused");
+      await expect(deployer.reg.pause()).to.emit(reg, "Paused");
 
       expect(await reg.paused()).to.be.true;
 
@@ -94,7 +90,7 @@ describe("REG", function () {
           .toLowerCase()} is missing role ${PAUSER_ROLE}`
       );
 
-      expect(await deployer.reg.unpause()).to.emit(reg, "Unpaused");
+      await expect(deployer.reg.unpause()).to.emit(reg, "Unpaused");
 
       expect(await reg.paused()).to.be.false;
     });
@@ -327,7 +323,7 @@ describe("REG", function () {
     });
 
     it("9. Upgradeablitity", async function () {
-      const { reg, deployer, bridge, users } = await setup();
+      const { reg, deployer, bridge } = await setup();
 
       await expect(bridge.reg.upgradeTo(ZERO_ADDRESS)).to.be.revertedWith(
         `AccessControl: account ${bridge.address
@@ -339,8 +335,6 @@ describe("REG", function () {
       const regV2 = await upgrades.upgradeProxy(reg.target, REG, {
         kind: "uups",
       });
-      console.log("regV2", regV2);
-      // await regV2.deployed();
     });
   });
 });
