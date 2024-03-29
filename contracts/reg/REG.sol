@@ -191,7 +191,7 @@ contract REG is
         address to,
         uint256 amount
     ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) {
-        super._beforeTokenTransfer(from, to, amount);
         require(!paused(), "ERC20Pausable: token transfer while paused");
+        super._beforeTokenTransfer(from, to, amount);
     }
 }

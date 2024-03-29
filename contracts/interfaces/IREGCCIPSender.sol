@@ -7,7 +7,12 @@ pragma solidity ^0.8.0;
  * @notice REG CCIP Sender
  */
 interface IREGCCIPSender {
-    struct AllowlistState {
+    struct AllowlistChainState {
+        address destinationChainReceiver;
+        bool isInList;
+    }
+
+    struct AllowlistTokenState {
         bool isAllowed;
         bool isInList;
     }
@@ -33,13 +38,31 @@ interface IREGCCIPSender {
     );
 
     /**
+     * @dev Emitted on ccipReceive when the tokens are received from CCIP
+     * @param messageId The unique ID of the message
+     * @param sourceChainSelector The chain selector of the source chain
+     * @param sender The address of the sender on the source chain
+     * @param receiver The address of the final receiver to receive the token
+     * @param token The token address
+     * @param amount the token amount that was transferred
+     */
+    event TokensReceived(
+        bytes32 indexed messageId,
+        uint64 indexed sourceChainSelector,
+        address sender,
+        address receiver,
+        address token,
+        uint256 amount
+    );
+
+    /**
      * @dev Emitted when allowlistDestinationChain is called
      * @param destinationChainSelector The selector of the destination chain to be updated
-     * @param allowed The allowlist status to be set for the destination chain
+     * @param destinationChainReceiver The CCIP receiver contract address for the destination chain
      */
     event AllowlistDestinationChain(
         uint64 indexed destinationChainSelector,
-        bool indexed allowed
+        address indexed destinationChainReceiver
     );
 
     /**
@@ -60,11 +83,11 @@ interface IREGCCIPSender {
      * @notice This function can only be called by the owner
      * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param destinationChainSelector The selector of the destination chain to be updated
-     * @param allowed The allowlist status to be set for the destination chain
+     * @param destinationChainReceiver The CCIP receiver contract address for the destination chain
      */
     function allowlistDestinationChain(
         uint64 destinationChainSelector,
-        bool allowed
+        address destinationChainReceiver
     ) external;
 
     /**
@@ -102,7 +125,7 @@ interface IREGCCIPSender {
         address token,
         uint256 amount,
         address feeToken
-    ) external returns (bytes32 messageId);
+    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
@@ -131,7 +154,7 @@ interface IREGCCIPSender {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external returns (bytes32 messageId);
+    ) external payable returns (bytes32 messageId);
 
     /**
      * @notice Allows the contract owner to withdraw the entire balance of Ether from the contract

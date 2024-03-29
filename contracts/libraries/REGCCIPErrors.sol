@@ -17,4 +17,6 @@ library REGCCIPErrors {
     error InvalidContractAddress(); // Used when a contract address is set to zero address.
     error InvalidFeeToken(address feeToken); // Used when the fee token is not LINK or zero address (native)
     error AllowedStateNotChange();
+    error InvalidRouter(address router); // Used when the router address is set to zero address.
+    error InvalidSender(address sender); // Used when the sender address is not allowlisted.
 }

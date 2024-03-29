@@ -8,6 +8,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
+import {IERC165} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/utils/introspection/IERC165.sol";
 import {REGCCIPErrors} from "../libraries/REGCCIPErrors.sol";
 import {IREGCCIPSender} from "../interfaces/IREGCCIPSender.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
@@ -20,7 +22,8 @@ import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 contract REGCCIPSender is
     AccessControlUpgradeable,
     UUPSUpgradeable,
-    IREGCCIPSender
+    IREGCCIPSender,
+    IAny2EVMMessageReceiver
 {
     using SafeERC20 for IERC20;
 
@@ -36,9 +39,9 @@ contract REGCCIPSender is
         0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum Mainnet
 
     // Mapping to keep track of allowlisted destination chains
-    mapping(uint64 => AllowlistState) private _allowlistedChains;
+    mapping(uint64 => AllowlistChainState) private _allowlistedChains;
 
-    mapping(address => AllowlistState) private _allowlistedTokens;
+    mapping(address => AllowlistTokenState) private _allowlistedTokens;
 
     uint64[] private _allowlistedChainsList;
 
@@ -90,7 +93,10 @@ contract REGCCIPSender is
      * @param destinationChainSelector The selector of the destination chain
      */
     modifier onlyAllowlistedChain(uint64 destinationChainSelector) {
-        if (!_allowlistedChains[destinationChainSelector].isAllowed)
+        if (
+            _allowlistedChains[destinationChainSelector]
+                .destinationChainReceiver == address(0)
+        )
             revert REGCCIPErrors.DestinationChainNotAllowlisted(
                 destinationChainSelector
             );
@@ -127,27 +133,37 @@ contract REGCCIPSender is
         _;
     }
 
+    /// @dev only calls from the set router are accepted.
+    modifier onlyRouter() {
+        if (msg.sender != address(_router))
+            revert REGCCIPErrors.InvalidRouter(msg.sender);
+        _;
+    }
+
     /// @inheritdoc IREGCCIPSender
     function allowlistDestinationChain(
         uint64 destinationChainSelector,
-        bool allowed
+        address destinationChainReceiver
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        AllowlistState storage chainState = _allowlistedChains[
+        AllowlistChainState storage chainState = _allowlistedChains[
             destinationChainSelector
         ];
 
-        if (chainState.isAllowed == allowed) {
+        if (chainState.destinationChainReceiver == destinationChainReceiver) {
             revert REGCCIPErrors.AllowedStateNotChange();
         }
 
-        chainState.isAllowed = allowed;
+        chainState.destinationChainReceiver = destinationChainReceiver;
 
-        if (allowed && !chainState.isInList) {
+        if (destinationChainReceiver != address(0) && !chainState.isInList) {
             _allowlistedChainsList.push(destinationChainSelector);
             chainState.isInList = true;
         }
 
-        emit AllowlistDestinationChain(destinationChainSelector, allowed);
+        emit AllowlistDestinationChain(
+            destinationChainSelector,
+            destinationChainReceiver
+        );
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -155,7 +171,7 @@ contract REGCCIPSender is
         address token,
         bool allowed
     ) external validateContractAddress(token) onlyRole(DEFAULT_ADMIN_ROLE) {
-        AllowlistState storage tokenState = _allowlistedTokens[token];
+        AllowlistTokenState storage tokenState = _allowlistedTokens[token];
 
         if (tokenState.isAllowed == allowed) {
             revert REGCCIPErrors.AllowedStateNotChange();
@@ -227,7 +243,7 @@ contract REGCCIPSender is
         address token,
         uint256 amount,
         address feeToken
-    ) external override returns (bytes32 messageId) {
+    ) external payable override returns (bytes32 messageId) {
         return
             _transferTokens(
                 destinationChainSelector,
@@ -249,7 +265,7 @@ contract REGCCIPSender is
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external override returns (bytes32 messageId) {
+    ) external payable override returns (bytes32 messageId) {
         IERC20WithPermit(token).permit(
             msg.sender,
             address(this),
@@ -308,7 +324,9 @@ contract REGCCIPSender is
     function isAllowlistedDestinationChain(
         uint64 destinationChainSelector
     ) external view override returns (bool) {
-        return _allowlistedChains[destinationChainSelector].isAllowed;
+        return
+            _allowlistedChains[destinationChainSelector]
+                .destinationChainReceiver == address(0);
     }
 
     /// @inheritdoc IREGCCIPSender
@@ -354,11 +372,15 @@ contract REGCCIPSender is
         }
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         //  address(linkToken) means fees are paid in LINK
+
+        address ccipReceiver = _allowlistedChains[destinationChainSelector]
+            .destinationChainReceiver;
         Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
-            receiver,
-            token,
-            amount,
-            feeToken
+            receiver, // final receiver to receive the token
+            token, // token address
+            amount, // amount of token
+            feeToken, // token for CCIP fees (LINK or native gas)
+            ccipReceiver // CCIPReceiver on destination chain
         );
 
         // Get the fee required to send the message
@@ -370,11 +392,9 @@ contract REGCCIPSender is
         IERC20(token).safeApprove(address(_router), amount);
 
         if (feeToken == address(0)) {
-            if (fees > address(this).balance)
-                revert REGCCIPErrors.NotEnoughBalance(
-                    address(this).balance,
-                    fees
-                );
+            // Check if msg.value is enough to pay for the fees
+            if (fees > msg.value)
+                revert REGCCIPErrors.NotEnoughBalance(msg.value, fees);
 
             // Send the message through the router and store the returned message ID
             // Safe to interact with Chainlink Router as it is a trusted contract
@@ -384,14 +404,10 @@ contract REGCCIPSender is
             );
         } else {
             IERC20 feeTokenInstance = IERC20(feeToken);
-            if (fees > feeTokenInstance.balanceOf(address(this)))
-                revert REGCCIPErrors.NotEnoughBalance(
-                    feeTokenInstance.balanceOf(address(this)),
-                    fees
-                );
-
             // Transfer LINK token from the user to this contract
+            // If user does not have enough feeToken, the safeTransferFrom will fail first
             feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
+
             // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
             feeTokenInstance.safeApprove(address(_router), fees);
 
@@ -430,22 +446,24 @@ contract REGCCIPSender is
         address receiver,
         address token,
         uint256 amount,
-        address feeTokenAddress
+        address feeTokenAddress,
+        address ccipReceiver
     ) private pure returns (Client.EVM2AnyMessage memory) {
         // Set the token amounts
         Client.EVMTokenAmount[]
             memory tokenAmounts = new Client.EVMTokenAmount[](1);
         tokenAmounts[0] = Client.EVMTokenAmount({token: token, amount: amount});
+        bytes memory data = abi.encode(receiver);
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         return
             Client.EVM2AnyMessage({
-                receiver: abi.encode(receiver), // ABI-encoded receiver address
-                data: "", // No data
+                receiver: abi.encode(ccipReceiver), // ABI-encoded receiver address
+                data: data, // No data
                 tokenAmounts: tokenAmounts, // The amount and type of token being transferred
                 extraArgs: Client._argsToBytes(
-                    // Additional arguments, setting gas limit to 0 as we are not sending any data
-                    Client.EVMExtraArgsV1({gasLimit: 0})
+                    // Setting gas limit for action on destination chain
+                    Client.EVMExtraArgsV1({gasLimit: 100000})
                 ),
                 // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees
                 feeToken: feeTokenAddress
@@ -465,7 +483,9 @@ contract REGCCIPSender is
             receiver,
             token,
             amount,
-            feeToken
+            feeToken,
+            _allowlistedChains[destinationChainSelector]
+                .destinationChainReceiver
         );
 
         // Get the fee required to send the message
@@ -473,5 +493,72 @@ contract REGCCIPSender is
 
         // Return fees in feeToken
         return fees;
+    }
+
+    //**************************************** Receiver Logic starts here ****************************************/
+
+    /// @notice IERC165 supports an interfaceId
+    /// @param interfaceId The interfaceId to check
+    /// @return true if the interfaceId is supported
+    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver
+    /// e.g. return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || interfaceId == type(IERC165).interfaceId
+    /// This allows CCIP to check if ccipReceive is available before calling it.
+    /// If this returns false or reverts, only tokens are transferred to the receiver.
+    /// If this returns true, tokens are transferred and ccipReceive is called atomically.
+    /// Additionally, if the receiver address does not have code associated with
+    /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override returns (bool) {
+        return
+            interfaceId == type(IAny2EVMMessageReceiver).interfaceId ||
+            interfaceId == type(IERC165).interfaceId ||
+            super.supportsInterface(interfaceId);
+    }
+
+    /// @inheritdoc IAny2EVMMessageReceiver
+    function ccipReceive(
+        Client.Any2EVMMessage calldata message
+    ) external override onlyRouter {
+        _ccipReceive(message);
+    }
+
+    /// @notice Override this function in your implementation.
+    /// @param any2EvmMessage Message to process
+    function _ccipReceive(Client.Any2EVMMessage memory any2EvmMessage) private {
+        // Handle the received message, emit event with all information for subgraph to index
+        // TokenPool minted to receiver (REGCCIPSenderReceiver), then need to transfer to user address from data in message
+        bytes32 messageId = any2EvmMessage.messageId; // fetch the messageId
+        uint64 sourceChainSelector = any2EvmMessage.sourceChainSelector; // fetch the source chain selector
+        address sender = abi.decode(any2EvmMessage.sender, (address)); // abi-decoding of the CCIPSender address
+
+        if (
+            _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
+            sender
+        ) {
+            revert REGCCIPErrors.InvalidSender(sender);
+        }
+
+        address receiver = abi.decode(any2EvmMessage.data, (address)); // abi-decoding of the receiver's address
+
+        // Collect tokens transferred. This increases this contract's balance for that Token.
+        Client.EVMTokenAmount[] memory tokenAmounts = any2EvmMessage
+            .destTokenAmounts;
+
+        address token = tokenAmounts[0].token;
+        uint256 amount = tokenAmounts[0].amount;
+
+        // Transfer the token to the receiver
+        IERC20(token).safeTransfer(receiver, amount);
+
+        // Emit an event with the message details
+        emit TokensReceived(
+            messageId,
+            sourceChainSelector,
+            sender,
+            receiver,
+            token,
+            amount
+        );
     }
 }
