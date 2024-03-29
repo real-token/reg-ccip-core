@@ -14,6 +14,7 @@ const func: DeployFunction = async function ({
   const { deployer } = await getNamedAccounts();
 
   const reg = (await deployments.get("REG")).address;
+  const weth = (await deployments.get("WETH")).address;
   const linkToken = (await deployments.get("LinkToken")).address;
   const priceRegistry = (await deployments.get("PriceRegistry")).address;
   const armProxy = (await deployments.get("ARMProxy")).address;
@@ -64,6 +65,13 @@ const func: DeployFunction = async function ({
       [
         [
           linkToken, // address token; // ─────────────────────╮ Token address
+          "50", // uint32 networkFeeUSDCents; //      │ Flat network fee to charge for messages,  multiples of 0.01 USD
+          "1050000000000000000", // uint64 gasMultiplierWeiPerEth; // ─────╯ Multiplier for gas costs, 1e18 based so 11e17 = 10% extra cost
+          "900000000000000000", // uint64 premiumMultiplierWeiPerEth; // ─╮ Multiplier for fee-token-specific premiums, 1e18 based
+          true, // bool enabled; // ──────────────────────╯ Whether this fee token is enabled
+        ],
+        [
+          weth, // address token; // ─────────────────────╮ Token address
           "50", // uint32 networkFeeUSDCents; //      │ Flat network fee to charge for messages,  multiples of 0.01 USD
           "1050000000000000000", // uint64 gasMultiplierWeiPerEth; // ─────╯ Multiplier for gas costs, 1e18 based so 11e17 = 10% extra cost
           "900000000000000000", // uint64 premiumMultiplierWeiPerEth; // ─╮ Multiplier for fee-token-specific premiums, 1e18 based

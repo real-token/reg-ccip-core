@@ -11,12 +11,14 @@ const func: DeployFunction = async function ({
 
   const linkTokenArtifact = await deployments.get("LinkToken");
   console.log("LinkToken instance at artifact:", linkTokenArtifact.address);
+  const wethArtifact = await deployments.get("WETH");
+  console.log("WETH instance at artifact:", wethArtifact.address);
 
   const priceRegistry = await deploy("PriceRegistry", {
     from: deployer,
     args: [
       [deployer], // priceUpdaters
-      [linkTokenArtifact.address], // feeTokens
+      [linkTokenArtifact.address, wethArtifact.address], // feeTokens
       86400, // stalenessThreshold
     ],
     log: true,
