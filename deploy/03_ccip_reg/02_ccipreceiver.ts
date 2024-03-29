@@ -15,36 +15,34 @@ const func: DeployFunction = async function ({
   const linkTokenArtifact = await deployments.get("LinkToken");
   console.log("LinkToken instance at artifact:", linkTokenArtifact.address);
 
-  const CCIPSenderReceiver = await ethers.getContractFactory(
-    "CCIPSenderReceiver"
-  );
-  const ccipSenderReceiver = await upgrades.deployProxy(
-    CCIPSenderReceiver,
+  const REGCCIPReceiver = await ethers.getContractFactory("CCIPSenderReceiver");
+  const regCCIPReceiver = await upgrades.deployProxy(
+    REGCCIPReceiver,
     [deployer, deployer, routerArtifact.address],
     { kind: "uups" }
   );
-  await ccipSenderReceiver.waitForDeployment();
+  await regCCIPReceiver.waitForDeployment();
 
   const implAddress = await upgrades.erc1967.getImplementationAddress(
-    await ccipSenderReceiver.getAddress()
+    await regCCIPReceiver.getAddress()
   );
 
   console.log(
-    "Deploy CCIPSenderReceiver Proxy to: ",
-    await ccipSenderReceiver.getAddress()
+    "Deploy REGCCIPReceiver Proxy to: ",
+    await regCCIPReceiver.getAddress()
   );
-  console.log("Deploy CCIPSenderReceiver Impl to: ", implAddress);
+  console.log("Deploy REGCCIPReceiver Impl to: ", implAddress);
 
   const artifact = await deployments.getExtendedArtifact("CCIPSenderReceiver");
   let proxyDeployments = {
-    address: await ccipSenderReceiver.getAddress(),
+    address: await regCCIPReceiver.getAddress(),
     ...artifact,
   };
 
-  await save("CCIPSenderReceiver", proxyDeployments);
+  await save("REGCCIPReceiver", proxyDeployments);
 };
 
-func.id = "CCIPSenderReceiver";
-func.tags = ["CCIPSenderReceiver"];
+func.id = "REGCCIPReceiver";
+func.tags = ["REGCCIPReceiver"];
 
 export default func;

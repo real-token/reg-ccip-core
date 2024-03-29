@@ -10,19 +10,19 @@ import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {IERC165} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/utils/introspection/IERC165.sol";
-import {REGCCIPErrors} from "../libraries/REGCCIPErrors.sol";
-import {IREGCCIPSender} from "../interfaces/IREGCCIPSender.sol";
+import {CCIPErrors} from "../libraries/CCIPErrors.sol";
+import {ICCIPSenderReceiver} from "../interfaces/ICCIPSenderReceiver.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 
 /**
- * @title REGCCIPSender
+ * @title CCIPSenderReceiver
  * @author RealT, version of RealT CCIP Sender based on Chainlink CCIP
  * @notice The contract of REG CCIP Sender for cross-chain token transfers
  */
-contract REGCCIPSender is
+contract CCIPSenderReceiver is
     AccessControlUpgradeable,
     UUPSUpgradeable,
-    IREGCCIPSender,
+    ICCIPSenderReceiver,
     IAny2EVMMessageReceiver
 {
     using SafeERC20 for IERC20;
@@ -32,11 +32,18 @@ contract REGCCIPSender is
 
     IRouterClient private _router;
 
+    // address private constant _linkToken =
+    //     0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK token address on Ethereum Mainnet
+
+    // address private constant _wrappedNativeToken =
+    //     0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum Mainnet
+
+    // TODO change back to each chain after testing
     address private constant _linkToken =
-        0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK token address on Ethereum Mainnet
+        0x5FC8d32690cc91D4c39d9d3abcBD16989F875707; // LINK token address on Hardhat
 
     address private constant _wrappedNativeToken =
-        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum Mainnet
+        0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9; // WETH on Hardhat
 
     // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistChainState) private _allowlistedChains;
@@ -97,7 +104,7 @@ contract REGCCIPSender is
             _allowlistedChains[destinationChainSelector]
                 .destinationChainReceiver == address(0)
         )
-            revert REGCCIPErrors.DestinationChainNotAllowlisted(
+            revert CCIPErrors.DestinationChainNotAllowlisted(
                 destinationChainSelector
             );
         _;
@@ -109,7 +116,7 @@ contract REGCCIPSender is
      */
     modifier onlyAllowlistedToken(address token) {
         if (!_allowlistedTokens[token].isAllowed)
-            revert REGCCIPErrors.TokenNotAllowlisted(token);
+            revert CCIPErrors.TokenNotAllowlisted(token);
         _;
     }
 
@@ -119,7 +126,7 @@ contract REGCCIPSender is
      */
     modifier validateContractAddress(address contractAddress) {
         if (!AddressUpgradeable.isContract(contractAddress))
-            revert REGCCIPErrors.InvalidContractAddress();
+            revert CCIPErrors.InvalidContractAddress();
         _;
     }
 
@@ -128,19 +135,18 @@ contract REGCCIPSender is
      * @param receiver The receiver address
      */
     modifier validateReceiver(address receiver) {
-        if (receiver == address(0))
-            revert REGCCIPErrors.InvalidReceiverAddress();
+        if (receiver == address(0)) revert CCIPErrors.InvalidReceiverAddress();
         _;
     }
 
     /// @dev only calls from the set router are accepted.
     modifier onlyRouter() {
         if (msg.sender != address(_router))
-            revert REGCCIPErrors.InvalidRouter(msg.sender);
+            revert CCIPErrors.InvalidRouter(msg.sender);
         _;
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function allowlistDestinationChain(
         uint64 destinationChainSelector,
         address destinationChainReceiver
@@ -150,7 +156,7 @@ contract REGCCIPSender is
         ];
 
         if (chainState.destinationChainReceiver == destinationChainReceiver) {
-            revert REGCCIPErrors.AllowedStateNotChange();
+            revert CCIPErrors.AllowedStateNotChange();
         }
 
         chainState.destinationChainReceiver = destinationChainReceiver;
@@ -166,7 +172,7 @@ contract REGCCIPSender is
         );
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function allowlistToken(
         address token,
         bool allowed
@@ -174,7 +180,7 @@ contract REGCCIPSender is
         AllowlistTokenState storage tokenState = _allowlistedTokens[token];
 
         if (tokenState.isAllowed == allowed) {
-            revert REGCCIPErrors.AllowedStateNotChange();
+            revert CCIPErrors.AllowedStateNotChange();
         }
 
         tokenState.isAllowed = allowed;
@@ -186,7 +192,7 @@ contract REGCCIPSender is
         emit AllowlistToken(token, allowed);
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function setRouter(
         address router
     )
@@ -199,7 +205,7 @@ contract REGCCIPSender is
         emit SetRouter(router);
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function withdraw(
         address beneficiary
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -207,7 +213,7 @@ contract REGCCIPSender is
         uint256 amount = address(this).balance;
 
         // Revert if there is nothing to withdraw
-        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
+        if (amount == 0) revert CCIPErrors.NothingToWithdraw();
 
         // Attempt to send the funds, capturing the success status and discarding any return data
         // This is considered safe because the beneficiary is chosen by admin
@@ -215,14 +221,14 @@ contract REGCCIPSender is
 
         // Revert if the send failed, with information about the attempted transfer
         if (!sent)
-            revert REGCCIPErrors.FailedToWithdrawEth(
+            revert CCIPErrors.FailedToWithdrawEth(
                 msg.sender,
                 beneficiary,
                 amount
             );
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function withdrawToken(
         address beneficiary,
         address token
@@ -231,12 +237,12 @@ contract REGCCIPSender is
         uint256 amount = IERC20(token).balanceOf(address(this));
 
         // Revert if there is nothing to withdraw
-        if (amount == 0) revert REGCCIPErrors.NothingToWithdraw();
+        if (amount == 0) revert CCIPErrors.NothingToWithdraw();
 
         IERC20(token).safeTransfer(beneficiary, amount);
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function transferTokens(
         uint64 destinationChainSelector,
         address receiver,
@@ -254,7 +260,7 @@ contract REGCCIPSender is
             );
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function transferTokensWithPermit(
         uint64 destinationChainSelector,
         address receiver,
@@ -285,22 +291,22 @@ contract REGCCIPSender is
             );
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function getRouter() external view override returns (address) {
         return address(_router);
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function getLinkToken() external pure override returns (address) {
         return _linkToken;
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function getWrappedNativeToken() external pure override returns (address) {
         return _wrappedNativeToken;
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function getAllowlistedDestinationChains()
         external
         view
@@ -310,7 +316,7 @@ contract REGCCIPSender is
         return _allowlistedChainsList;
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function getAllowlistedTokens()
         external
         view
@@ -320,16 +326,16 @@ contract REGCCIPSender is
         return _allowlistedTokensList;
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function isAllowlistedDestinationChain(
         uint64 destinationChainSelector
     ) external view override returns (bool) {
         return
             _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver == address(0);
+                .destinationChainReceiver != address(0);
     }
 
-    /// @inheritdoc IREGCCIPSender
+    /// @inheritdoc ICCIPSenderReceiver
     function isAllowlistedToken(
         address token
     ) external view override returns (bool) {
@@ -368,7 +374,7 @@ contract REGCCIPSender is
             feeToken != _linkToken &&
             feeToken != _wrappedNativeToken
         ) {
-            revert REGCCIPErrors.InvalidFeeToken(feeToken);
+            revert CCIPErrors.InvalidFeeToken(feeToken);
         }
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         //  address(linkToken) means fees are paid in LINK
@@ -394,7 +400,7 @@ contract REGCCIPSender is
         if (feeToken == address(0)) {
             // Check if msg.value is enough to pay for the fees
             if (fees > msg.value)
-                revert REGCCIPErrors.NotEnoughBalance(msg.value, fees);
+                revert CCIPErrors.NotEnoughBalance(msg.value, fees);
 
             // Send the message through the router and store the returned message ID
             // Safe to interact with Chainlink Router as it is a trusted contract
@@ -527,7 +533,7 @@ contract REGCCIPSender is
     /// @param any2EvmMessage Message to process
     function _ccipReceive(Client.Any2EVMMessage memory any2EvmMessage) private {
         // Handle the received message, emit event with all information for subgraph to index
-        // TokenPool minted to receiver (REGCCIPSenderReceiver), then need to transfer to user address from data in message
+        // TokenPool minted to receiver (CCIPSenderReceiverReceiver), then need to transfer to user address from data in message
         bytes32 messageId = any2EvmMessage.messageId; // fetch the messageId
         uint64 sourceChainSelector = any2EvmMessage.sourceChainSelector; // fetch the source chain selector
         address sender = abi.decode(any2EvmMessage.sender, (address)); // abi-decoding of the CCIPSender address
@@ -536,7 +542,7 @@ contract REGCCIPSender is
             _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
             sender
         ) {
-            revert REGCCIPErrors.InvalidSender(sender);
+            revert CCIPErrors.InvalidSender(sender);
         }
 
         address receiver = abi.decode(any2EvmMessage.data, (address)); // abi-decoding of the receiver's address

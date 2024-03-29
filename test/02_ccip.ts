@@ -1,10 +1,4 @@
-import { TokenPool } from "./../typechain-types/@chainlink/contracts-ccip/src/v0.8/ccip/pools/TokenPool";
-import { PriceRegistry } from "./../typechain-types/@chainlink/contracts-ccip/src/v0.8/ccip/PriceRegistry";
-import { LinkToken } from "./../typechain-types/@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken";
-import {
-  loadFixture,
-  time,
-} from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import {
   ethers,
@@ -24,9 +18,8 @@ import {
   LINKTOKEN_ETHEREUM,
   ETHER_UNIT,
   MINTER_BRIDGE_ROLE,
-  WETH_ETHEREUM,
 } from "../helpers/constants";
-import { REGCCIPErrors } from "../helpers/types";
+import { CCIPErrors } from "../helpers/types";
 import { getPermitSignatureERC20 } from "./utils/utils";
 
 async function setup() {
@@ -41,7 +34,8 @@ async function setup() {
   const OnRamp = await deployments.get("EVM2EVMOnRamp");
   const PriceRegistry = await deployments.get("PriceRegistry");
   const TokenPool = await deployments.get("BurnMintTokenPool");
-  const REGCCIPSender = await deployments.get("REGCCIPSender");
+  const CCIPSenderReceiver = await deployments.get("CCIPSenderReceiver");
+  const REGCCIPReceiver = await deployments.get("REGCCIPReceiver");
 
   const contracts = {
     reg: await ethers.getContractAt("REG", REG.address),
@@ -57,7 +51,14 @@ async function setup() {
       "BurnMintTokenPool",
       TokenPool.address
     ),
-    ccip: await ethers.getContractAt("REGCCIPSender", REGCCIPSender.address),
+    ccip: await ethers.getContractAt(
+      "CCIPSenderReceiver",
+      CCIPSenderReceiver.address
+    ),
+    ccipReceiver: await ethers.getContractAt(
+      "CCIPSenderReceiver",
+      REGCCIPReceiver.address
+    ),
   };
 
   await contracts.reg.grantRole(MINTER_BRIDGE_ROLE, TokenPool.address);
@@ -136,10 +137,13 @@ describe("CCIP", function () {
     });
 
     it("2. allowlistDestinationChain", async function () {
-      const { ccip, deployer, admin } = await setup();
+      const { ccip, ccipReceiver, deployer, admin } = await setup();
 
       await expect(
-        admin.ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, true)
+        admin.ccip.allowlistDestinationChain(
+          CHAIN_SELECTOR_MUMBAI,
+          ccipReceiver.target
+        )
       ).to.be.revertedWith(
         `AccessControl: account ${admin.address
           .toString()
@@ -147,10 +151,13 @@ describe("CCIP", function () {
       );
 
       await expect(
-        deployer.ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, true)
+        deployer.ccip.allowlistDestinationChain(
+          CHAIN_SELECTOR_MUMBAI,
+          ccipReceiver.target
+        )
       )
         .to.emit(ccip, "AllowlistDestinationChain")
-        .withArgs(CHAIN_SELECTOR_MUMBAI, true);
+        .withArgs(CHAIN_SELECTOR_MUMBAI, ccipReceiver.target);
     });
 
     it("3. allowlistToken", async function () {
@@ -166,10 +173,7 @@ describe("CCIP", function () {
 
       await expect(
         deployer.ccip.allowlistToken(ZERO_ADDRESS, true)
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidContractAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidContractAddress);
 
       await expect(deployer.ccip.allowlistToken(reg.target, true))
         .to.emit(ccip, "AllowlistToken")
@@ -187,10 +191,7 @@ describe("CCIP", function () {
 
       await expect(
         deployer.ccip.setRouter(ZERO_ADDRESS)
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidContractAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidContractAddress);
 
       await expect(deployer.ccip.setRouter(router.target))
         .to.emit(ccip, "SetRouter")
@@ -199,6 +200,18 @@ describe("CCIP", function () {
 
     it("5. withdraw", async function () {
       const { ccip, deployer, admin } = await setup();
+
+      // Revert when not default admin withdraw
+      await expect(admin.ccip.withdraw(admin.address)).to.be.revertedWith(
+        `AccessControl: account ${admin.address
+          .toString()
+          .toLowerCase()} is missing role ${DEFAULT_ADMIN_ROLE}`
+      );
+
+      // Revert when nothing to withdraw
+      await expect(
+        deployer.ccip.withdraw(deployer.address)
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.NothingToWithdraw);
 
       const [donator] = await ethers.getSigners();
 
@@ -209,12 +222,6 @@ describe("CCIP", function () {
 
       const balance = await ethers.provider.getBalance(ccip.target);
       console.log("Ether balance of ccip", balance.toString());
-
-      await expect(admin.ccip.withdraw(admin.address)).to.be.revertedWith(
-        `AccessControl: account ${admin.address
-          .toString()
-          .toLowerCase()} is missing role ${DEFAULT_ADMIN_ROLE}`
-      );
 
       console.log(
         "Ether balance of deployer before: ",
@@ -230,11 +237,6 @@ describe("CCIP", function () {
     it("6. withdrawToken", async function () {
       const { reg, ccip, deployer, admin } = await setup();
 
-      await deployer.reg.mintByGovernance(ccip.target, 1000);
-      let ccipBalance = await reg.balanceOf(ccip.target);
-      expect(ccipBalance).to.be.equal(1000);
-      console.log("Token balance of ccip", ccipBalance.toString());
-
       await expect(
         admin.ccip.withdrawToken(admin.address, reg.target)
       ).to.be.revertedWith(
@@ -242,6 +244,16 @@ describe("CCIP", function () {
           .toString()
           .toLowerCase()} is missing role ${DEFAULT_ADMIN_ROLE}`
       );
+
+      // Revert when nothing to withdraw
+      await expect(
+        deployer.ccip.withdrawToken(deployer.address, reg.target)
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.NothingToWithdraw);
+
+      await deployer.reg.mintByGovernance(ccip.target, 1000);
+      let ccipBalance = await reg.balanceOf(ccip.target);
+      expect(ccipBalance).to.be.equal(1000);
+      console.log("Token balance of ccip", ccipBalance.toString());
 
       await deployer.ccip.withdrawToken(deployer.address, reg.target);
 
@@ -252,7 +264,8 @@ describe("CCIP", function () {
 
   describe("User functions: transferTokens/transferTokenWithPermit", async function () {
     it("7. transferTokens using LINK: reverted cases", async function () {
-      const { reg, ccip, deployer, admin, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, admin, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       // await deployer.linkToken.grantMintRole(deployer.address);
@@ -278,7 +291,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.TokenNotAllowlisted);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
@@ -292,12 +305,12 @@ describe("CCIP", function () {
         )
       ).to.be.revertedWithCustomError(
         ccip,
-        REGCCIPErrors.DestinationChainNotAllowlisted
+        CCIPErrors.DestinationChainNotAllowlisted
       );
 
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await expect(
@@ -308,10 +321,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidReceiverAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
         users[0].ccip.transferTokens(
@@ -321,11 +331,12 @@ describe("CCIP", function () {
           1000,
           LINKTOKEN_ETHEREUM
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.InvalidFeeToken);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
     });
 
     it("8. transferTokens using native: reverted cases", async function () {
-      const { reg, ccip, deployer, admin, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, admin, users, linkToken } =
+        await setup();
       // Mint REG users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
 
@@ -345,7 +356,7 @@ describe("CCIP", function () {
           1000,
           ZERO_ADDRESS
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.TokenNotAllowlisted);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
@@ -359,12 +370,12 @@ describe("CCIP", function () {
         )
       ).to.be.revertedWithCustomError(
         ccip,
-        REGCCIPErrors.DestinationChainNotAllowlisted
+        CCIPErrors.DestinationChainNotAllowlisted
       );
 
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await expect(
@@ -375,10 +386,7 @@ describe("CCIP", function () {
           1000,
           ZERO_ADDRESS
         )
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidReceiverAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
         users[0].ccip.transferTokens(
@@ -388,7 +396,7 @@ describe("CCIP", function () {
           1000,
           LINKTOKEN_ETHEREUM
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.InvalidFeeToken);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
 
       await expect(
         users[0].ccip.transferTokens(
@@ -398,11 +406,12 @@ describe("CCIP", function () {
           1000,
           ZERO_ADDRESS
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.NotEnoughBalance);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.NotEnoughBalance);
     });
 
     it("9. transferTokens using LINK: succeed", async function () {
-      const { reg, ccip, deployer, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       await deployer.linkToken.grantMintRole(deployer.address);
@@ -423,20 +432,31 @@ describe("CCIP", function () {
       await deployer.ccip.allowlistToken(reg.target, true);
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
-      await users[0].ccip.transferTokens(
+      const fees = await users[0].ccip.getCcipFeesEstimation(
         CHAIN_SELECTOR_MUMBAI,
         users[0].address,
         reg.target,
         1000,
         linkToken.target
       );
+
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          linkToken.target
+        )
+      ).to.emit(ccip, "TokensTransferred");
     });
 
     it("10. transferTokens using native: succeed", async function () {
-      const { reg, ccip, deployer, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, users, linkToken } =
+        await setup();
       // Mint REG to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       console.log(
@@ -450,21 +470,35 @@ describe("CCIP", function () {
       await deployer.ccip.allowlistToken(reg.target, true);
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
-      // TODO send tx with msg.value = fees
-      // await users[0].ccip.transferTokens(
-      //   CHAIN_SELECTOR_MUMBAI,
-      //   users[0].address,
-      //   reg.target,
-      //   1000,
-      //   ZERO_ADDRESS
-      // );
+      // Estimate fees
+      const fees = await users[0].ccip.getCcipFeesEstimation(
+        CHAIN_SELECTOR_MUMBAI,
+        users[0].address,
+        reg.target,
+        1000,
+        ZERO_ADDRESS
+      );
+      console.log("Fee", fees.toString());
+
+      // send tx with msg.value = fees
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          ZERO_ADDRESS,
+          { value: fees }
+        )
+      ).to.emit(ccip, "TokensTransferred");
     });
 
     it("11. transferTokensWithPermit using LINK: reverted cases", async function () {
-      const { reg, ccip, deployer, admin, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, admin, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       // await deployer.linkToken.grantMintRole(deployer.address);
@@ -490,7 +524,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.TokenNotAllowlisted);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
@@ -504,12 +538,12 @@ describe("CCIP", function () {
         )
       ).to.be.revertedWithCustomError(
         ccip,
-        REGCCIPErrors.DestinationChainNotAllowlisted
+        CCIPErrors.DestinationChainNotAllowlisted
       );
 
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await expect(
@@ -520,10 +554,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidReceiverAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
         users[0].ccip.transferTokens(
@@ -533,11 +564,12 @@ describe("CCIP", function () {
           1000,
           LINKTOKEN_ETHEREUM
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.InvalidFeeToken);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
     });
 
     it("12. transferTokensWithPermit using native: reverted cases", async function () {
-      const { reg, ccip, deployer, admin, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, admin, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       // await deployer.linkToken.grantMintRole(deployer.address);
@@ -563,7 +595,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.TokenNotAllowlisted);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
@@ -577,12 +609,12 @@ describe("CCIP", function () {
         )
       ).to.be.revertedWithCustomError(
         ccip,
-        REGCCIPErrors.DestinationChainNotAllowlisted
+        CCIPErrors.DestinationChainNotAllowlisted
       );
 
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await expect(
@@ -593,10 +625,7 @@ describe("CCIP", function () {
           1000,
           linkToken.target
         )
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.InvalidReceiverAddress
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
         users[0].ccip.transferTokens(
@@ -606,22 +635,22 @@ describe("CCIP", function () {
           1000,
           LINKTOKEN_ETHEREUM
         )
-      ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.InvalidFeeToken);
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
 
-      // TODO tx can not reach this state, since if the user does not have enough balance, the tx will be reverted at safeTransferFrom
-      // await expect(
-      //   users[0].ccip.transferTokens(
-      //     CHAIN_SELECTOR_MUMBAI,
-      //     users[0].address,
-      //     reg.target,
-      //     1000,
-      //     ZERO_ADDRESS
-      //   )
-      // ).to.be.revertedWithCustomError(ccip, REGCCIPErrors.NotEnoughBalance);
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          ZERO_ADDRESS
+        )
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.NotEnoughBalance);
     });
 
     it("13. transferTokensWithPermit using LINK: succeed", async function () {
-      const { reg, ccip, deployer, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       await deployer.linkToken.grantMintRole(deployer.address);
@@ -642,7 +671,7 @@ describe("CCIP", function () {
       await deployer.ccip.allowlistToken(reg.target, true);
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await users[0].ccip.transferTokens(
@@ -655,7 +684,8 @@ describe("CCIP", function () {
     });
 
     it("14. transferTokensWithPermit using native: succeed", async function () {
-      const { reg, ccip, deployer, users, linkToken } = await setup();
+      const { reg, ccip, ccipReceiver, deployer, users, linkToken } =
+        await setup();
       // Mint REG and LINK to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
       await deployer.linkToken.grantMintRole(deployer.address);
@@ -676,7 +706,7 @@ describe("CCIP", function () {
       await deployer.ccip.allowlistToken(reg.target, true);
       await deployer.ccip.allowlistDestinationChain(
         CHAIN_SELECTOR_MUMBAI,
-        true
+        ccipReceiver.target
       );
 
       await users[0].ccip.transferTokens(
@@ -727,8 +757,11 @@ describe("CCIP", function () {
     });
 
     it("18. getAllowlistedDestinationChains/isAllowlistedDestinationChain", async function () {
-      const { ccip, deployer } = await setup();
-      await ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, true);
+      const { ccip, ccipReceiver, deployer } = await setup();
+      await ccip.allowlistDestinationChain(
+        CHAIN_SELECTOR_MUMBAI,
+        ccipReceiver.target
+      );
       expect(await ccip.getAllowlistedDestinationChains()).to.be.deep.equal([
         CHAIN_SELECTOR_MUMBAI,
       ]);
@@ -737,20 +770,24 @@ describe("CCIP", function () {
         .be.true;
 
       await expect(
-        ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, true)
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.AllowedStateNotChange
-      );
+        ccip.allowlistDestinationChain(
+          CHAIN_SELECTOR_MUMBAI,
+          ccipReceiver.target
+        )
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.AllowedStateNotChange);
 
-      await ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, false);
+      await ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, ZERO_ADDRESS);
+
       expect(await ccip.getAllowlistedDestinationChains()).to.be.deep.equal([
         CHAIN_SELECTOR_MUMBAI,
       ]);
 
       expect(await ccip.isAllowlistedDestinationChain(CHAIN_SELECTOR_MUMBAI)).to
         .be.false;
-      await ccip.allowlistDestinationChain(CHAIN_SELECTOR_MUMBAI, true);
+      await ccip.allowlistDestinationChain(
+        CHAIN_SELECTOR_MUMBAI,
+        ccipReceiver.target
+      );
       expect(await ccip.getAllowlistedDestinationChains()).to.be.deep.equal([
         CHAIN_SELECTOR_MUMBAI,
       ]);
@@ -765,10 +802,7 @@ describe("CCIP", function () {
 
       await expect(
         ccip.allowlistToken(reg.target, true)
-      ).to.be.revertedWithCustomError(
-        ccip,
-        REGCCIPErrors.AllowedStateNotChange
-      );
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.AllowedStateNotChange);
 
       await ccip.allowlistToken(reg.target, false);
       expect(await ccip.isAllowlistedToken(reg.target)).to.be.false;
@@ -802,6 +836,9 @@ describe("CCIP", function () {
         "supportsInterface",
         await ccip.supportsInterface("0x01ffc9a7")
       );
+      expect(await ccip.supportsInterface("0x01ffc9a7")).to.be.true; // type(IERC165).interfaceId = type(IERC165Upgradeable).interfaceId
+      expect(await ccip.supportsInterface("0x85572ffb")).to.be.true; // type(IAny2EVMMessageReceiver).interfaceId
+      expect(await ccip.supportsInterface("0x7965db0b")).to.be.true; // type(IAccessControlUpgradeable).interfaceId
     });
 
     // TODO replicate Chainlink offchain message sending to test ccipReceive
@@ -820,10 +857,16 @@ describe("CCIP", function () {
           .toLowerCase()} is missing role ${UPGRADER_ROLE}`
       );
 
-      const REGCCIPSender = await ethers.getContractFactory("REGCCIPSender");
-      const ccipV2 = await upgrades.upgradeProxy(ccip.target, REGCCIPSender, {
-        kind: "uups",
-      });
+      const CCIPSenderReceiver = await ethers.getContractFactory(
+        "CCIPSenderReceiver"
+      );
+      const ccipV2 = await upgrades.upgradeProxy(
+        ccip.target,
+        CCIPSenderReceiver,
+        {
+          kind: "uups",
+        }
+      );
     });
   });
 });

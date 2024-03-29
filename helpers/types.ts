@@ -4,7 +4,7 @@ export enum REGErrors {
   LengthNotMatch = "LengthNotMatch",
 }
 
-export enum REGCCIPErrors {
+export enum CCIPErrors {
   NotEnoughBalance = "NotEnoughBalance",
   NothingToWithdraw = "NothingToWithdraw",
   FailedToWithdrawEth = "FailedToWithdrawEth",
