@@ -36,6 +36,7 @@ async function setup() {
   const TokenPool = await deployments.get("BurnMintTokenPool");
   const CCIPSenderReceiver = await deployments.get("CCIPSenderReceiver");
   const REGCCIPReceiver = await deployments.get("REGCCIPReceiver");
+  const RouterMock = await deployments.get("RouterMock");
 
   const contracts = {
     reg: await ethers.getContractAt("REG", REG.address),
@@ -59,6 +60,7 @@ async function setup() {
       "CCIPSenderReceiver",
       REGCCIPReceiver.address
     ),
+    routerMock: await ethers.getContractAt("RouterMock", RouterMock.address),
   };
 
   await contracts.reg.grantRole(MINTER_BRIDGE_ROLE, TokenPool.address);
@@ -843,13 +845,75 @@ describe("CCIP", function () {
 
     // TODO replicate Chainlink offchain message sending to test ccipReceive
     it("22. ccipReceive", async function () {
-      const { ccip, deployer } = await setup();
+      const { ccip, reg, router, routerMock, deployer, admin, users } =
+        await setup();
+
+      // Mint REG to ccip (mock mintingByBridge to ccipReceiver, pretend all tx from Chainlink offChain went through)
+      // Here we only simulate the behavior of CCIPReceiver after receiving the token and message
+      await reg.mintByGovernance(ccip.target, 1000);
+
+      console.log(
+        "Balance of ccipReceiver before ccip receive",
+        (await reg.balanceOf(ccip.target)).toString()
+      );
+
+      const abi = ethers.AbiCoder.defaultAbiCoder();
+
+      const message = {
+        messageId:
+          "0xf2e2cf2e986b157cfa50ce492e6334c5c861d867cbdfcdd89bac8655e7f7719e",
+        sourceChainSelector: CHAIN_SELECTOR_SEPOLIA,
+        sender: abi.encode(["address"], [ccip.target]), // sender on source chain is CCIPSenderReceiver on source chain
+        data: abi.encode(["address"], [users[0].address]),
+        destTokenAmounts: [
+          {
+            token: reg.target,
+            amount: 1000,
+          },
+        ],
+      };
+
+      await expect(
+        users[0].routerMock.ccipReceive(message, ccip.target)
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidRouter);
+
+      await ccip.setRouter(routerMock.target);
+
+      await expect(
+        users[0].routerMock.ccipReceive(message, ccip.target)
+      ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidSender);
+
+      await ccip.allowlistDestinationChain(CHAIN_SELECTOR_SEPOLIA, ccip.target);
+
+      await expect(users[0].routerMock.ccipReceive(message, ccip.target))
+        .to.emit(ccip, "TokensReceived")
+        .withArgs(
+          message.messageId,
+          CHAIN_SELECTOR_SEPOLIA,
+          ccip.target,
+          users[0].address,
+          reg.target,
+          1000
+        );
+
+      expect(await reg.balanceOf(users[0].address)).to.be.equal(1000);
+      expect(await reg.balanceOf(ccip.target)).to.be.equal(0);
+
+      console.log(
+        "Balance of ccipReceiver after ccip receive",
+        (await reg.balanceOf(ccip.target)).toString()
+      );
+
+      console.log(
+        "Balance of users0 after ccip receive",
+        (await reg.balanceOf(users[0].address)).toString()
+      );
     });
   });
 
   describe("Upgradeability", async function () {
     it("23. Upgradeability", async function () {
-      const { ccip, deployer, admin } = await setup();
+      const { ccip, admin } = await setup();
 
       await expect(admin.ccip.upgradeTo(ZERO_ADDRESS)).to.be.revertedWith(
         `AccessControl: account ${admin.address

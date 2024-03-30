@@ -15,4 +15,5 @@ export enum CCIPErrors {
   InvalidFeeToken = "InvalidFeeToken",
   AllowedStateNotChange = "AllowedStateNotChange",
   InvalidRouter = "InvalidRouter",
+  InvalidSender = "InvalidSender",
 }
