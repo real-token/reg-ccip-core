@@ -514,29 +514,53 @@ describe("CCIP", function () {
         (await reg.balanceOf(users[0].address)).toString()
       );
 
+      const deadline = (await time.latest()) + 3600;
+      const user0 = await ethers.getSigner(users[0].address);
+      console.log("user0", user0.address);
+
+      const transferSignature = await getPermitSignatureERC20(
+        user0,
+        ccip.target.toString(),
+        1000,
+        deadline,
+        reg
+      );
+
+      const { v, r, s } = ethers.Signature.from(transferSignature);
+      console.log("v", v);
+      console.log("r", r);
+      console.log("s", s);
+
       // Approve CCIP to spend LINK and REG
-      await users[0].reg.approve(ccip.target, ETHER_UNIT);
       await users[0].linkToken.approve(ccip.target, ETHER_UNIT);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
-          users[0].address,
+          user0.address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(
         ccip,
@@ -549,22 +573,30 @@ describe("CCIP", function () {
       );
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           ZERO_ADDRESS,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          LINKTOKEN_ETHEREUM
+          LINKTOKEN_ETHEREUM,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
     });
@@ -572,42 +604,57 @@ describe("CCIP", function () {
     it("12. transferTokensWithPermit using native: reverted cases", async function () {
       const { reg, ccip, ccipReceiver, deployer, admin, users, linkToken } =
         await setup();
-      // Mint REG and LINK to users[0]
+      // Mint REG to users[0]
       await deployer.reg.mintByGovernance(users[0].address, ETHER_UNIT);
-      // await deployer.linkToken.grantMintRole(deployer.address);
-      // await deployer.linkToken.mint(users[0].address, ETHER_UNIT);
-      console.log(
-        "User LINK token balance before transfer",
-        (await linkToken.balanceOf(users[0].address)).toString()
-      );
+
       console.log(
         "User REG token balance before transfer",
         (await reg.balanceOf(users[0].address)).toString()
       );
 
-      // Approve CCIP to spend LINK and REG
+      const deadline = (await time.latest()) + 3600;
+      const user0 = await ethers.getSigner(users[0].address);
+
+      const transferSignature = await getPermitSignatureERC20(
+        user0,
+        ccip.target.toString(),
+        1000,
+        deadline,
+        reg
+      );
+
+      const { v, r, s } = ethers.Signature.from(transferSignature);
+
+      // Approve CCIP to spend REG
       await users[0].reg.approve(ccip.target, ETHER_UNIT);
-      await users[0].linkToken.approve(ccip.target, ETHER_UNIT);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          ZERO_ADDRESS,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
       await deployer.ccip.allowlistToken(reg.target, true);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          ZERO_ADDRESS,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(
         ccip,
@@ -620,32 +667,44 @@ describe("CCIP", function () {
       );
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           ZERO_ADDRESS,
           reg.target,
           1000,
-          linkToken.target
+          ZERO_ADDRESS,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          LINKTOKEN_ETHEREUM
+          LINKTOKEN_ETHEREUM,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
 
       await expect(
-        users[0].ccip.transferTokens(
+        users[0].ccip.transferTokensWithPermit(
           CHAIN_SELECTOR_MUMBAI,
           users[0].address,
           reg.target,
           1000,
-          ZERO_ADDRESS
+          ZERO_ADDRESS,
+          deadline,
+          v,
+          r,
+          s
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.NotEnoughBalance);
     });
@@ -666,6 +725,19 @@ describe("CCIP", function () {
         (await reg.balanceOf(users[0].address)).toString()
       );
 
+      const deadline = (await time.latest()) + 3600;
+      const user0 = await ethers.getSigner(users[0].address);
+
+      const transferSignature = await getPermitSignatureERC20(
+        user0,
+        ccip.target.toString(),
+        1000,
+        deadline,
+        reg
+      );
+
+      const { v, r, s } = ethers.Signature.from(transferSignature);
+
       // Approve CCIP to spend LINK and REG
       await users[0].reg.approve(ccip.target, ETHER_UNIT);
       await users[0].linkToken.approve(ccip.target, ETHER_UNIT);
@@ -676,12 +748,16 @@ describe("CCIP", function () {
         ccipReceiver.target
       );
 
-      await users[0].ccip.transferTokens(
+      await users[0].ccip.transferTokensWithPermit(
         CHAIN_SELECTOR_MUMBAI,
         users[0].address,
         reg.target,
         1000,
-        linkToken.target
+        linkToken.target,
+        deadline,
+        v,
+        r,
+        s
       );
     });
 
@@ -711,29 +787,44 @@ describe("CCIP", function () {
         ccipReceiver.target
       );
 
-      await users[0].ccip.transferTokens(
+      const deadline = (await time.latest()) + 3600;
+      const user0 = await ethers.getSigner(users[0].address);
+
+      const transferSignature = await getPermitSignatureERC20(
+        user0,
+        ccip.target.toString(),
+        1000,
+        deadline,
+        reg
+      );
+
+      const { v, r, s } = ethers.Signature.from(transferSignature);
+
+      // Estimate fees
+      const fees = await users[0].ccip.getCcipFeesEstimation(
         CHAIN_SELECTOR_MUMBAI,
         users[0].address,
         reg.target,
         1000,
-        linkToken.target
+        ZERO_ADDRESS
       );
-    });
+      console.log("Fee", fees.toString());
 
-    it("8. transferTokensWithPermit", async function () {
-      const { reg, ccip, deployer, users } = await setup();
-      const timeStamp = await time.latest();
-      const user0 = await ethers.getSigner(users[0].address);
-      const [user1] = await ethers.getSigners();
-      console.log("user0", user0);
-      const transferSignature = await getPermitSignatureERC20(
-        user0,
-        ccip.target.toString(),
-        timeStamp + 3600,
-        1000,
-        reg
-      );
-      console.log("transferSignature", transferSignature);
+      // send tx with msg.value = fees
+      await expect(
+        users[0].ccip.transferTokensWithPermit(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          ZERO_ADDRESS,
+          deadline,
+          v,
+          r,
+          s,
+          { value: fees }
+        )
+      ).to.emit(ccip, "TokensTransferred");
     });
   });
 

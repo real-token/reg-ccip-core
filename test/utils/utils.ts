@@ -9,7 +9,7 @@ export async function getPermitSignatureERC20(
   spender: string,
   value: BigNumberish,
   deadline: BigNumberish,
-  token: Contract,
+  token: Contract | REG,
   permitConfig?: {
     nonce?: BigNumberish;
     name?: string;
@@ -21,7 +21,7 @@ export async function getPermitSignatureERC20(
     permitConfig?.nonce ?? token.nonces(wallet.address),
     permitConfig?.name ?? token.name(),
     permitConfig?.version ?? "1",
-    permitConfig?.chainId ?? wallet.provider.getNetwork().chainId,
+    permitConfig?.chainId ?? (await wallet.provider.getNetwork()).chainId,
     // permitConfig?.chainId ?? wallet.getChainId(),
   ]);
 
@@ -31,7 +31,7 @@ export async function getPermitSignatureERC20(
         name,
         version,
         chainId,
-        verifyingContract: token.address,
+        verifyingContract: await token.getAddress(),
       },
       {
         Permit: [
