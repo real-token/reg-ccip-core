@@ -64,7 +64,13 @@ const config: HardhatUserConfig = {
     disambiguatePaths: false,
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: {
+      mainnet: process.env.ETHERSCAN_API_KEY as string,
+      sepolia: process.env.ETHERSCAN_API_KEY as string,
+      gnosis: process.env.GNOSISSCAN_API_KEY as string,
+      matic: process.env.POLYGONSCAN_API_KEY as string,
+      polygonMumbai: process.env.POLYGONSCAN_API_KEY as string,
+    },
   },
 };
 

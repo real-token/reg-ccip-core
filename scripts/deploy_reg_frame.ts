@@ -29,13 +29,13 @@ async function main() {
     { kind: "uups" }
   );
 
-  const regDeployed = await regTx.deployed();
+  await regTx.waitForDeployment();
 
   const implAddress = await upgrades.erc1967.getImplementationAddress(
-    regDeployed.address
+    await regTx.getAddress()
   );
 
-  console.log(`Proxy address deployed: ${regDeployed.address}`);
+  console.log(`Proxy address deployed: ${await regTx.getAddress()}`);
   console.log(`Implementation address deployed: ${implAddress}`);
 
   function sleep(ms: number) {

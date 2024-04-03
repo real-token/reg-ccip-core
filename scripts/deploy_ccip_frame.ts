@@ -26,13 +26,15 @@ async function main() {
     { kind: "uups" }
   );
 
-  const ccipSenderReceiverDeployed = await ccipSenderReceiverTx.deployed();
+  await ccipSenderReceiverTx.waitForDeployment();
 
   const implAddress = await upgrades.erc1967.getImplementationAddress(
-    ccipSenderReceiverDeployed.address
+    await ccipSenderReceiverTx.getAddress()
   );
 
-  console.log(`Proxy address deployed: ${ccipSenderReceiverDeployed.address}`);
+  console.log(
+    `Proxy address deployed: ${await ccipSenderReceiverTx.getAddress()}`
+  );
   console.log(`Implementation address deployed: ${implAddress}`);
 
   function sleep(ms: number) {

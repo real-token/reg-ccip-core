@@ -110,12 +110,12 @@
 
 ## Roadmap
 
-- RealToken Ecosystem Governance
-- CCIP (cross-chain)
-- Testing
-- Static analysis (Slither)
-- Fuzzing (Echidna)
-- Audit
+- RealToken Ecosystem Governance ✅
+- CCIP (cross-chain) ✅
+- Testing ✅
+- Static analysis (Slither) ✅
+- Fuzzing (Echidna) ❌
+- Audit ❌
 
 See the [open issues](https://github.com/real-token/reg-ccip-core/issues) for a full list of proposed features (and known issues).
 
