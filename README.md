@@ -139,6 +139,18 @@ npx hardhat coverage
 npx hardhat test
 ```
 
+## Deployments
+
+```
+- Setup addresses of LINK/WrappedNative in contract
+- Set up ADMIN/UPGRADER in .env
+- Set up ROUTER in .env for each chain
+- Deploy CCIPSenderReceiver on Sepolia
+- Deploy CCIPSenderReceiver on Mumbai
+- allowlistToken
+- allowlistDestinationChain
+```
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->

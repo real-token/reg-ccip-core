@@ -4,10 +4,10 @@
 
 RealT contracts
 
-| Source chain  | Destination chain |
-| ------------- | ----------------- |
-| REG           | REG               |
-| REGCCIPSender |                   |
+| Source chain          | Destination chain     |
+| --------------------- | --------------------- |
+| REG                   | REG                   |
+| REGCCIPSenderReceiver | REGCCIPSenderReceiver |
 
 Chainlink contracts
 
@@ -59,9 +59,9 @@ ARMProxy/ARM (1 per source/destination chain)
 
 To enable cross-chain applications of REG token, we use Chainlink CCIP.
 
-### 3.1 CCIPSender contract:
+### 3.1 CCIPSenderReceiver contract:
 
-We develop a REGCCIPSender contract which is the entry for user to "bridge" their REG token from one chain to another chain
+We develop a CCIPSenderReceivercontract which is the entry for user to "bridge" their REG token from one chain to another chain
 
 The contract includes:
 
@@ -70,7 +70,6 @@ Admin function:
 - allowlistDestinationChain
 - allowlistToken
 - setRouter
-- setLinkToken
 - withdraw
 - withdrawToken
 
@@ -99,15 +98,9 @@ Questions:
 
 ### 3.3 Practices:
 
-- ccipSend: verify destination chain
+- ccipSend: verify destination chain, optimizing gas limit for actions on destination chain
 - ccipReceive:
   verify source chain, sender, router address
   setting gasLimit
-- use extraArgs (mutable, if extraArgs are left empty, a default of 200000 gasLimit will be set.)
-- Manual execution
-
-- Decoupling CCIP Message Reception and Business Logic
-- Evaluate the security and reliability of the networks that you use
-- Review and audit your code
-- Soak test your dApps, Be aware of the Service Limits and Rate Limits for Supported Networks.
-- Monitor your dApps
+- Use extraArgs to set gasLimit to be as close as possible to gas consumption (mutable, if extraArgs are left empty, a default of 200000 gasLimit will be set.)
+- Prepare manual execution according to Chainlink if the transfer failed to execute on destination chain

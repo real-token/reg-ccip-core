@@ -1,13 +1,13 @@
 # 1. Slither run:
 
-To run Slither on REG contract and REGCCIPSender contract:
+To run Slither on REG contract and CCIPSenderReceiver contract:
 
 ```
 slither contracts/reg/REG.sol --solc-remaps '@openzeppelin=node_modules/@openzeppelin'
 ```
 
 ```
-slither contracts/ccip/REGCCIPSender.sol --solc-remaps '@openzeppelin=node_modules/@openzeppelin @chainlink=node_modules/@chainlink'
+slither contracts/ccip/CCIPSenderReceiver.sol --solc-remaps '@openzeppelin=node_modules/@openzeppelin @chainlink=node_modules/@chainlink'
 ```
 
 # 2. Vunerabilities:
@@ -18,7 +18,8 @@ slither contracts/ccip/REGCCIPSender.sol --solc-remaps '@openzeppelin=node_modul
 
 ```
 REGCCIPSender.withdraw(address) (contracts/ccip/REGCCIPSender.sol#187-207) sends eth to arbitrary user
-Dangerous calls: - (sent) = beneficiary.call{value: amount}() (contracts/ccip/REGCCIPSender.sol#198)
+Dangerous calls:
+- (sent) = beneficiary.call{value: amount}() (contracts/ccip/CCIPSenderReceiver.sol#219)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#functions-that-send-ether-to-arbitrary-destinations
 ```
 
@@ -26,21 +27,24 @@ Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#functio
 
 ```
 
-REGCCIPSender.\_transferTokens(uint64,address,address,uint256,address) (contracts/ccip/REGCCIPSender.sol#334-418) sends eth to arbitrary user
-Dangerous calls: - messageId = \_router.ccipSend{value: fees}(destinationChainSelector,evm2AnyMessage) (contracts/ccip/REGCCIPSender.sol#381-384)
+CCIPSenderReceiver._transferTokens(uint64,address,address,uint256,address) (contracts/ccip/CCIPSenderReceiver.sol#357-439) sends eth to arbitrary user
+Dangerous calls:
+- messageId = _router.ccipSend{value: fees}(destinationChainSelector,evm2AnyMessage) (contracts/ccip/CCIPSenderReceiver.sol#406-409)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#functions-that-send-ether-to-arbitrary-destinations
 ```
 
-3. This is safe
+3. This is safe as admin withdraw native only when there is a balance
 
 ```
-REGCCIPSender.withdraw(address) (contracts/ccip/REGCCIPSender.sol#187-207) uses a dangerous strict equality: - amount == 0 (contracts/ccip/REGCCIPSender.sol#194)
+CCIPSenderReceiver.withdraw(address) (contracts/ccip/CCIPSenderReceiver.sol#208-228) uses a dangerous strict equality:
+				- amount == 0 (contracts/ccip/CCIPSenderReceiver.sol#215)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
 ```
 
-4.  This is safe
+4.  This is safe as admin withdraw a token only when there is a balance
 
 ```
-REGCCIPSender.withdrawToken(address,address) (contracts/ccip/REGCCIPSender.sol#210-221) uses a dangerous strict equality: - amount == 0 (contracts/ccip/REGCCIPSender.sol#218)
+CCIPSenderReceiver.withdrawToken(address,address) (contracts/ccip/CCIPSenderReceiver.sol#231-242) uses a dangerous strict equality:
+        - amount == 0 (contracts/ccip/CCIPSenderReceiver.sol#239)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
 ```
