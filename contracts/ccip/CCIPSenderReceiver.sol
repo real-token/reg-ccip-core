@@ -32,15 +32,9 @@ contract CCIPSenderReceiver is
 
     IRouterClient private _router;
 
-    // address private constant _linkToken =
-    //     0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK token address on Ethereum Mainnet
-
-    // address private constant _wrappedNativeToken =
-    //     0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum Mainnet
-
     // TODO change back to each chain after testing
     address private constant _linkToken =
-        0x5FC8d32690cc91D4c39d9d3abcBD16989F875707; // LINK token address on Hardhat
+        0x5FC8d32690cc91D4c39d9d3abcBD16989F875707; // LINK on Hardhat
 
     address private constant _wrappedNativeToken =
         0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9; // WETH on Hardhat
@@ -395,7 +389,7 @@ contract CCIPSenderReceiver is
         // Transfer REG token from the user to this contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).safeApprove(address(_router), amount);
+        IERC20(token).safeIncreaseAllowance(address(_router), amount);
 
         if (feeToken == address(0)) {
             // Check if msg.value is enough to pay for the fees
@@ -415,7 +409,7 @@ contract CCIPSenderReceiver is
             feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
 
             // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
-            feeTokenInstance.safeApprove(address(_router), fees);
+            feeTokenInstance.safeIncreaseAllowance(address(_router), fees);
 
             // Send the message through the router and store the returned message ID
             messageId = _router.ccipSend(
@@ -526,17 +520,11 @@ contract CCIPSenderReceiver is
     function ccipReceive(
         Client.Any2EVMMessage calldata message
     ) external override onlyRouter {
-        _ccipReceive(message);
-    }
-
-    /// @notice Override this function in your implementation.
-    /// @param any2EvmMessage Message to process
-    function _ccipReceive(Client.Any2EVMMessage memory any2EvmMessage) private {
         // Handle the received message, emit event with all information for subgraph to index
         // TokenPool minted to receiver (CCIPSenderReceiverReceiver), then need to transfer to user address from data in message
-        bytes32 messageId = any2EvmMessage.messageId; // fetch the messageId
-        uint64 sourceChainSelector = any2EvmMessage.sourceChainSelector; // fetch the source chain selector
-        address sender = abi.decode(any2EvmMessage.sender, (address)); // abi-decoding of the CCIPSender address
+        bytes32 messageId = message.messageId; // fetch the messageId
+        uint64 sourceChainSelector = message.sourceChainSelector; // fetch the source chain selector
+        address sender = abi.decode(message.sender, (address)); // abi-decoding of the CCIPSender address
 
         if (
             _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
@@ -545,11 +533,10 @@ contract CCIPSenderReceiver is
             revert CCIPErrors.InvalidSender(sender);
         }
 
-        address receiver = abi.decode(any2EvmMessage.data, (address)); // abi-decoding of the receiver's address
+        address receiver = abi.decode(message.data, (address)); // abi-decoding of the receiver's address
 
         // Collect tokens transferred. This increases this contract's balance for that Token.
-        Client.EVMTokenAmount[] memory tokenAmounts = any2EvmMessage
-            .destTokenAmounts;
+        Client.EVMTokenAmount[] memory tokenAmounts = message.destTokenAmounts;
 
         address token = tokenAmounts[0].token;
         uint256 amount = tokenAmounts[0].amount;
