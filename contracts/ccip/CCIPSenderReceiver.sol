@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
@@ -20,12 +21,16 @@ import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
  * @notice The contract of REG CCIP Sender for cross-chain token transfers
  */
 contract CCIPSenderReceiver is
+    PausableUpgradeable,
     AccessControlUpgradeable,
     UUPSUpgradeable,
     ICCIPSenderReceiver,
     IAny2EVMMessageReceiver
 {
     using SafeERC20 for IERC20;
+
+    bytes32 public constant PAUSER_ROLE =
+        0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a; // = keccak256("PAUSER_ROLE")
 
     bytes32 public constant UPGRADER_ROLE =
         0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3; // = keccak256("UPGRADER_ROLE")
@@ -55,17 +60,21 @@ contract CCIPSenderReceiver is
 
     /// @notice Initializes the contract
     /// @param defaultAdmin The address of the default admin
+    /// @param pauser The address of the pauser
     /// @param upgrader The address of the upgrader
     /// @param router The address of the router contract
     function initialize(
         address defaultAdmin,
+        address pauser,
         address upgrader,
         address router
     ) external initializer {
+        __Pausable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
+        _grantRole(PAUSER_ROLE, pauser);
         _grantRole(UPGRADER_ROLE, upgrader);
 
         _router = IRouterClient(router);
@@ -88,6 +97,20 @@ contract CCIPSenderReceiver is
      * It is automatically called when Ether is transferred to the contract without any data
      */
     receive() external payable {}
+
+    /**
+     * @dev Pause the contract if needed
+     **/
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Unpause the contract if needed
+     **/
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
 
     /**
      * @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted
@@ -357,6 +380,7 @@ contract CCIPSenderReceiver is
         address feeToken
     )
         private
+        whenNotPaused
         onlyAllowlistedToken(token)
         onlyAllowlistedChain(destinationChainSelector)
         validateReceiver(receiver)
@@ -519,7 +543,7 @@ contract CCIPSenderReceiver is
     /// @inheritdoc IAny2EVMMessageReceiver
     function ccipReceive(
         Client.Any2EVMMessage calldata message
-    ) external override onlyRouter {
+    ) external override whenNotPaused onlyRouter {
         // Handle the received message, emit event with all information for subgraph to index
         // TokenPool minted to receiver (CCIPSenderReceiverReceiver), then need to transfer to user address from data in message
         bytes32 messageId = message.messageId; // fetch the messageId

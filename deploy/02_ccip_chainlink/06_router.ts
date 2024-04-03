@@ -19,7 +19,6 @@ const func: DeployFunction = async function ({
     log: true,
   });
   console.log("Router deployed to:", router.address);
-  // TODO applyRampUpdates to whitelist destination chains with on/offRamp addresses
 };
 
 func.tags = ["Router"];

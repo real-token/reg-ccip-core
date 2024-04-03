@@ -61,7 +61,7 @@ const func: DeployFunction = async function ({
         "1000000000000000000000000", // uint128 capacity; // ────╮ Specifies the capacity of the rate limiter
         "277000000000000000000", // uint128 rate; //  ───────╯ Specifies the rate of the rate limiter
       ],
-      /// [] struct FeeTokenConfigArgs // TODO add WETH config in constructor
+      /// [] struct FeeTokenConfigArgs
       [
         [
           linkToken, // address token; // ─────────────────────╮ Token address

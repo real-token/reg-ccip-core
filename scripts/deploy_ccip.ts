@@ -9,7 +9,12 @@ async function main() {
 
   const ccipSenderReceiver = await upgrades.deployProxy(
     CCIPSenderReceiver,
-    [process.env.ADMIN, process.env.UPGRADER, process.env.ROUTER],
+    [
+      process.env.ADMIN,
+      process.env.PAUSER,
+      process.env.UPGRADER,
+      process.env.ROUTER,
+    ],
     { kind: "uups" }
   );
 

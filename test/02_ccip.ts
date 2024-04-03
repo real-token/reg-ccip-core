@@ -10,6 +10,7 @@ import {
 import { setupUsers, setupUser } from "./utils";
 import {
   DEFAULT_ADMIN_ROLE,
+  PAUSER_ROLE,
   UPGRADER_ROLE,
   ZERO_ADDRESS,
   LINKTOKEN_HARDHAT,
@@ -127,15 +128,42 @@ describe("CCIP", function () {
       expect(await ccip.hasRole(DEFAULT_ADMIN_ROLE, deployer.address)).to.be
         .true;
 
+      expect(await ccip.hasRole(PAUSER_ROLE, deployer.address)).to.be.true;
+
       expect(await ccip.hasRole(UPGRADER_ROLE, deployer.address)).to.be.true;
 
       await expect(
         deployer.ccip.initialize(
           deployer.address,
           deployer.address,
+          deployer.address,
           router.target
         )
       ).to.be.revertedWith("Initializable: contract is already initialized");
+    });
+
+    it("2. Admin should be able to pause/unpause", async function () {
+      const { ccip, deployer, bridge } = await setup();
+
+      await expect(bridge.ccip.pause()).to.be.revertedWith(
+        `AccessControl: account ${bridge.address
+          .toString()
+          .toLowerCase()} is missing role ${PAUSER_ROLE}`
+      );
+
+      await expect(deployer.ccip.pause()).to.emit(ccip, "Paused");
+
+      expect(await ccip.paused()).to.be.true;
+
+      await expect(bridge.ccip.unpause()).to.be.revertedWith(
+        `AccessControl: account ${bridge.address
+          .toString()
+          .toLowerCase()} is missing role ${PAUSER_ROLE}`
+      );
+
+      await expect(deployer.ccip.unpause()).to.emit(ccip, "Unpaused");
+
+      expect(await ccip.paused()).to.be.false;
     });
 
     it("2. allowlistDestinationChain", async function () {
@@ -334,6 +362,19 @@ describe("CCIP", function () {
           LINKTOKEN_ETHEREUM
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
+
+      // Pause the CCIP contract
+      await deployer.ccip.pause();
+
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          linkToken.target
+        )
+      ).to.be.revertedWith("Pausable: paused");
     });
 
     it("8. transferTokens using native: reverted cases", async function () {
@@ -409,6 +450,31 @@ describe("CCIP", function () {
           ZERO_ADDRESS
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.NotEnoughBalance);
+
+      // Estimate fees
+      const fees = await users[0].ccip.getCcipFeesEstimation(
+        CHAIN_SELECTOR_MUMBAI,
+        users[0].address,
+        reg.target,
+        1000,
+        ZERO_ADDRESS
+      );
+      console.log("Fee", fees.toString());
+
+      // Pause the CCIP contract
+      await deployer.ccip.pause();
+
+      // send tx with msg.value = fees
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          ZERO_ADDRESS,
+          { value: fees }
+        )
+      ).to.be.revertedWith("Pausable: paused");
     });
 
     it("9. transferTokens using LINK: succeed", async function () {
@@ -934,7 +1000,6 @@ describe("CCIP", function () {
       expect(await ccip.supportsInterface("0x7965db0b")).to.be.true; // type(IAccessControlUpgradeable).interfaceId
     });
 
-    // TODO replicate Chainlink offchain message sending to test ccipReceive
     it("22. ccipReceive", async function () {
       const { ccip, reg, router, routerMock, deployer, admin, users } =
         await setup();
@@ -975,6 +1040,13 @@ describe("CCIP", function () {
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidSender);
 
       await ccip.allowlistDestinationChain(CHAIN_SELECTOR_SEPOLIA, ccip.target);
+
+      await ccip.pause();
+      await expect(
+        users[0].routerMock.ccipReceive(message, ccip.target)
+      ).to.be.revertedWith("Pausable: paused");
+
+      await ccip.unpause();
 
       await expect(users[0].routerMock.ccipReceive(message, ccip.target))
         .to.emit(ccip, "TokensReceived")

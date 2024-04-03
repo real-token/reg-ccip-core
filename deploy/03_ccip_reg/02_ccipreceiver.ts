@@ -18,7 +18,7 @@ const func: DeployFunction = async function ({
   const REGCCIPReceiver = await ethers.getContractFactory("CCIPSenderReceiver");
   const regCCIPReceiver = await upgrades.deployProxy(
     REGCCIPReceiver,
-    [deployer, deployer, routerArtifact.address],
+    [deployer, deployer, deployer,  routerArtifact.address],
     { kind: "uups" }
   );
   await regCCIPReceiver.waitForDeployment();

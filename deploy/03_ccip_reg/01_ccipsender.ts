@@ -20,7 +20,7 @@ const func: DeployFunction = async function ({
   );
   const ccipSenderReceiver = await upgrades.deployProxy(
     CCIPSenderReceiver,
-    [deployer, deployer, routerArtifact.address],
+    [deployer, deployer, deployer, routerArtifact.address],
     { kind: "uups" }
   );
   await ccipSenderReceiver.waitForDeployment();
