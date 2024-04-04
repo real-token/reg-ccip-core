@@ -45,10 +45,11 @@ Below are the list of dependencies used in these contracts. Since the interfaces
 | Imports                  | Description       | Need for audit |
 | ------------------------ | ----------------- | -------------- |
 | IERC20                   | Interface         | No             |
-| SafeERC20                | Abstract contract | No             |
+| SafeERC20                | Library           | No             |
+| AddressUpgradeable       | Library           | No             |
 | UUPSUpgradeable          | Abstract contract | No             |
 | AccessControlUpgradeable | Abstract contract | No             |
-| AddressUpgradeable       | Abstract contract | No             |
+| PausableUpgradeable      | Abstract contract | No             |
 
 ### From Chainlink (audited)
 
@@ -67,7 +68,7 @@ Below are the list of dependencies used in these contracts. Since the interfaces
 | Contracts                                                          | Description          | nSLOC (estimated by Consensys plugin) |
 | ------------------------------------------------------------------ | -------------------- | ------------------------------------- |
 | [REG.sol](../contracts/reg/REG.sol)                                | ERC20                | 110                                   |
-| [CCIPSenderReceiver.sol](../contracts/ccip/CCIPSenderReceiver.sol) | Cross-chain transfer | 280                                   |
+| [CCIPSenderReceiver.sol](../contracts/ccip/CCIPSenderReceiver.sol) | Cross-chain transfer | 292                                   |
 
 Contracts metrics using solidity-metrics plugin (Consensys):
 
@@ -83,6 +84,16 @@ Contracts metrics using solidity-metrics plugin (Consensys):
 
 Below are diagrams of different components:
 
-- Users can transferTokens from the source chain to the destination chain via CCIP
+There is a contract CCIPSenderReceiver on each chain, which acts as entry point for user to initiate a cross-chain transfer or receive token from.
+
+![Alt text](./assets/images/REG-CCIP-chains.png "CCIPSenderReceiver on different chains")
+
+Users use the function transferTokens on the source chain to send token to the destination chain via CCIP
 
 ![Alt text](./assets/images/REG-CCIP-Flows.png "CCIP transferTokens flows")
+
+- User can user transferTokens in CCIPSenderReceiver contract to transfer REG cross-chain
+- User pay CCIP fees in LINK, native or wrapped native
+- Once the transfer is finished on the source chain, the TokenPool contract of Chainlink burns the token that need to be transferred
+- Chainlink offchain components (Risk Management network, Committing DON, Executing DON) listen to the events on Chainlink contract EVM2EVMOnRamp.
+- If everything is validated, it triggers a transaction on the destination chain to mint the token to CCIPSenderReceiver, then the CCIPSenderReceiver transfer the token to the receiver and emit an event for off-chain indexes.

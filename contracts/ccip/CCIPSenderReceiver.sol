@@ -37,12 +37,11 @@ contract CCIPSenderReceiver is
 
     IRouterClient private _router;
 
-    // TODO change back to each chain after testing
     address private constant _linkToken =
-        0x5FC8d32690cc91D4c39d9d3abcBD16989F875707; // LINK on Hardhat
+        0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
 
     address private constant _wrappedNativeToken =
-        0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9; // WETH on Hardhat
+        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
 
     // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistChainState) private _allowlistedChains;

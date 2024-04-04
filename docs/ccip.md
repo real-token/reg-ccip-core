@@ -61,7 +61,10 @@ To enable cross-chain applications of REG token, we use Chainlink CCIP.
 
 ### 3.1 CCIPSenderReceiver contract:
 
-We develop a CCIPSenderReceivercontract which is the entry for user to "bridge" their REG token from one chain to another chain
+We develop a CCIPSenderReceivercontract which is the entry for user to "bridge" their REG token from one chain to another chain. It has 2 main functionalities:
+
+- transferTokens for an user to transfer token from the source chain
+- ccipReceive to receive token minted on the destination chain, then transfer it to the user
 
 The contract includes:
 
@@ -88,19 +91,16 @@ View functions:
 - isAllowlistedDestinationChain
 - isAllowlistedToken
 
-### 3.2 Questions:
+### 3.2 Remarks:
 
-Questions:
+ccipSend (transferTokens):
 
-- Only bridge REG or allow whitelisted tokens? => Use allowlist token to be able to transfer other token in the future
-- Should we create a receiver contract on the destination chain? Or mint directly to user on destination chain?
-- What to do if cross-chain tx failed (manual execution)
-
-### 3.3 Practices:
-
-- ccipSend: verify destination chain, optimizing gas limit for actions on destination chain
-- ccipReceive:
-  verify source chain, sender, router address
-  setting gasLimit
+- verify destination chain, optimizing gas limit for actions on destination chain
 - Use extraArgs to set gasLimit to be as close as possible to gas consumption (mutable, if extraArgs are left empty, a default of 200000 gasLimit will be set.)
-- Prepare manual execution according to Chainlink if the transfer failed to execute on destination chain
+
+ccipReceive:
+
+- verify source chain, sender, router address
+- emit event with all information for subgraph indexes
+
+Prepare manual execution according to Chainlink if the transfer failed to execute on destination chain
