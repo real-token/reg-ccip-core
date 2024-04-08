@@ -264,7 +264,8 @@ contract CCIPSenderReceiver is
         address receiver,
         address token,
         uint256 amount,
-        address feeToken
+        address feeToken,
+        uint256 gasLimit
     ) external payable override returns (bytes32 messageId) {
         return
             _transferTokens(
@@ -272,7 +273,8 @@ contract CCIPSenderReceiver is
                 receiver,
                 token,
                 amount,
-                feeToken
+                feeToken,
+                gasLimit
             );
     }
 
@@ -283,6 +285,7 @@ contract CCIPSenderReceiver is
         address token,
         uint256 amount,
         address feeToken,
+        uint256 gasLimit,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -303,7 +306,8 @@ contract CCIPSenderReceiver is
                 receiver,
                 token,
                 amount,
-                feeToken
+                feeToken,
+                gasLimit
             );
     }
 
@@ -369,6 +373,7 @@ contract CCIPSenderReceiver is
      * @param token token address
      * @param amount token amount
      * @param feeToken fee token address (LINK or 0 for native gas)
+     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @return messageId The ID of the message that was sent
      */
     function _transferTokens(
@@ -376,7 +381,8 @@ contract CCIPSenderReceiver is
         address receiver,
         address token,
         uint256 amount,
-        address feeToken
+        address feeToken,
+        uint256 gasLimit
     )
         private
         whenNotPaused
@@ -403,7 +409,8 @@ contract CCIPSenderReceiver is
             token, // token address
             amount, // amount of token
             feeToken, // token for CCIP fees (LINK or native gas)
-            ccipReceiver // CCIPReceiver on destination chain
+            ccipReceiver, // CCIPReceiver on destination chain,
+            gasLimit // gasLimit, adjust this value as needed
         );
 
         // Get the fee required to send the message
@@ -463,6 +470,8 @@ contract CCIPSenderReceiver is
      * @param token The token to be transferred
      * @param amount The amount of the token to be transferred
      * @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas
+     * @param ccipReceiver The address of the CCIPSenderReceiver on the destination chain
+     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message
      */
     function _buildCCIPMessage(
@@ -470,7 +479,8 @@ contract CCIPSenderReceiver is
         address token,
         uint256 amount,
         address feeTokenAddress,
-        address ccipReceiver
+        address ccipReceiver,
+        uint256 gasLimit
     ) private pure returns (Client.EVM2AnyMessage memory) {
         // Set the token amounts
         Client.EVMTokenAmount[]
@@ -486,19 +496,21 @@ contract CCIPSenderReceiver is
                 tokenAmounts: tokenAmounts, // The amount and type of token being transferred
                 extraArgs: Client._argsToBytes(
                     // Setting gas limit for action on destination chain
-                    Client.EVMExtraArgsV1({gasLimit: 100000})
+                    Client.EVMExtraArgsV1({gasLimit: gasLimit})
                 ),
                 // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees
                 feeToken: feeTokenAddress
             });
     }
 
+    /// @inheritdoc ICCIPSenderReceiver
     function getCcipFeesEstimation(
         uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount,
-        address feeToken
+        address feeToken,
+        uint256 gasLimit
     ) external view returns (uint256) {
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         // address(0) means fees are paid in native gas
@@ -508,7 +520,8 @@ contract CCIPSenderReceiver is
             amount,
             feeToken,
             _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver
+                .destinationChainReceiver,
+            gasLimit
         );
 
         // Get the fee required to send the message

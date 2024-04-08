@@ -117,6 +117,7 @@ interface ICCIPSenderReceiver {
      * @param token token address
      * @param amount token amount
      * @param feeToken the token address used to pay CCIP fees
+     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @return messageId The ID of the message that was sent
      */
     function transferTokens(
@@ -124,7 +125,8 @@ interface ICCIPSenderReceiver {
         address receiver,
         address token,
         uint256 amount,
-        address feeToken
+        address feeToken,
+        uint256 gasLimit
     ) external payable returns (bytes32 messageId);
 
     /**
@@ -138,6 +140,7 @@ interface ICCIPSenderReceiver {
      * @param token token address
      * @param amount token amount
      * @param feeToken the token address used to pay CCIP fees
+     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @param deadline The deadline timestamp for the permit signature
      * @param v Signature parameter
      * @param r Signature parameter
@@ -150,6 +153,7 @@ interface ICCIPSenderReceiver {
         address token,
         uint256 amount,
         address feeToken,
+        uint256 gasLimit,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -226,6 +230,7 @@ interface ICCIPSenderReceiver {
      * @param receiver The address of the recipient on the destination blockchain
      * @param token token address
      * @param amount token amount
+     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @return The estimated fees of CCIP tx in feeToken (address(0) for native gas)
      */
     function getCcipFeesEstimation(
@@ -233,6 +238,7 @@ interface ICCIPSenderReceiver {
         address receiver,
         address token,
         uint256 amount,
-        address feeToken
+        address feeToken,
+        uint256 gasLimit
     ) external view returns (uint256);
 }

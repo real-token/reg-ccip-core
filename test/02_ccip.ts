@@ -19,6 +19,7 @@ import {
   LINKTOKEN_ETHEREUM,
   ETHER_UNIT,
   MINTER_BRIDGE_ROLE,
+  CCIP_GAS_LIMIT,
 } from "../helpers/constants";
 import { CCIPErrors } from "../helpers/types";
 import { getPermitSignatureERC20 } from "./utils/utils";
@@ -319,7 +320,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
@@ -331,7 +333,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(
         ccip,
@@ -349,7 +352,8 @@ describe("CCIP", function () {
           ZERO_ADDRESS,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
@@ -359,7 +363,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          LINKTOKEN_ETHEREUM
+          LINKTOKEN_ETHEREUM,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
 
@@ -372,7 +377,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWith("Pausable: paused");
     });
@@ -397,7 +403,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          ZERO_ADDRESS
+          ZERO_ADDRESS,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.TokenNotAllowlisted);
 
@@ -409,7 +416,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          ZERO_ADDRESS
+          ZERO_ADDRESS,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(
         ccip,
@@ -427,7 +435,8 @@ describe("CCIP", function () {
           ZERO_ADDRESS,
           reg.target,
           1000,
-          ZERO_ADDRESS
+          ZERO_ADDRESS,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidReceiverAddress);
 
@@ -437,7 +446,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          LINKTOKEN_ETHEREUM
+          LINKTOKEN_ETHEREUM,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.InvalidFeeToken);
 
@@ -447,7 +457,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          ZERO_ADDRESS
+          ZERO_ADDRESS,
+          CCIP_GAS_LIMIT
         )
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.NotEnoughBalance);
 
@@ -457,7 +468,8 @@ describe("CCIP", function () {
         users[0].address,
         reg.target,
         1000,
-        ZERO_ADDRESS
+        ZERO_ADDRESS,
+        CCIP_GAS_LIMIT
       );
       console.log("Fee", fees.toString());
 
@@ -472,6 +484,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           { value: fees }
         )
       ).to.be.revertedWith("Pausable: paused");
@@ -508,7 +521,8 @@ describe("CCIP", function () {
         users[0].address,
         reg.target,
         1000,
-        linkToken.target
+        linkToken.target,
+        CCIP_GAS_LIMIT
       );
 
       await expect(
@@ -517,7 +531,8 @@ describe("CCIP", function () {
           users[0].address,
           reg.target,
           1000,
-          linkToken.target
+          linkToken.target,
+          CCIP_GAS_LIMIT
         )
       ).to.emit(ccip, "TokensTransferred");
     });
@@ -547,7 +562,8 @@ describe("CCIP", function () {
         users[0].address,
         reg.target,
         1000,
-        ZERO_ADDRESS
+        ZERO_ADDRESS,
+        CCIP_GAS_LIMIT
       );
       console.log("Fee", fees.toString());
 
@@ -559,6 +575,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           { value: fees }
         )
       ).to.emit(ccip, "TokensTransferred");
@@ -607,6 +624,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           linkToken.target,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -623,6 +641,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           linkToken.target,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -645,6 +664,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           linkToken.target,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -659,6 +679,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           LINKTOKEN_ETHEREUM,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -701,6 +722,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -717,6 +739,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -739,6 +762,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -753,6 +777,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           LINKTOKEN_ETHEREUM,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -767,6 +792,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -820,6 +846,7 @@ describe("CCIP", function () {
         reg.target,
         1000,
         linkToken.target,
+        CCIP_GAS_LIMIT,
         deadline,
         v,
         r,
@@ -872,7 +899,8 @@ describe("CCIP", function () {
         users[0].address,
         reg.target,
         1000,
-        ZERO_ADDRESS
+        ZERO_ADDRESS,
+        CCIP_GAS_LIMIT
       );
       console.log("Fee", fees.toString());
 
@@ -884,6 +912,7 @@ describe("CCIP", function () {
           reg.target,
           1000,
           ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
           deadline,
           v,
           r,
@@ -980,7 +1009,8 @@ describe("CCIP", function () {
         admin.address,
         reg.target,
         1000,
-        LINKTOKEN_HARDHAT
+        LINKTOKEN_HARDHAT,
+        CCIP_GAS_LIMIT
       );
       console.log("fee", fee.toString());
       expect(fee).to.be.gt(0);
