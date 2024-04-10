@@ -64,4 +64,13 @@ if (process.env.MUMBAI_RPC_URL && process.env.PRIVATE_KEY) {
   };
 }
 
+if (process.env.FUJI_RPC_URL && process.env.PRIVATE_KEY) {
+  networks.fuji = {
+    url: process.env.FUJI_RPC_URL,
+    chainId: 43113,
+    gasPrice: "auto",
+    accounts: [process.env.PRIVATE_KEY],
+  };
+}
+
 export default networks;

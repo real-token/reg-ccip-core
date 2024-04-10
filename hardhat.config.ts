@@ -70,6 +70,7 @@ const config: HardhatUserConfig = {
       gnosis: process.env.GNOSISSCAN_API_KEY as string,
       matic: process.env.POLYGONSCAN_API_KEY as string,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY as string,
+      avalancheFujiTestnet: process.env.AVAXSCAN_API_KEY as string,
     },
   },
 };

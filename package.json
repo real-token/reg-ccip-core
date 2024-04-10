@@ -16,6 +16,7 @@
     "deploy:reg:gnosis": "npx hardhat run scripts/deploy_reg.ts --network gnosis",
     "deploy:ccip:hardhat": "npx hardhat run scripts/deploy_ccip.ts --network hardhat",
     "deploy:ccip:sepolia": "npx hardhat run scripts/deploy_ccip.ts --network sepolia",
+    "deploy:ccip:fuji": "npx hardhat run scripts/deploy_ccip.ts --network fuji",
     "deploy:ccip:polygonMumbai": "npx hardhat run scripts/deploy_ccip.ts --network polygonMumbai",
     "deploy:ccip:mainnet": "npx hardhat run scripts/deploy_ccip.ts --network mainnet",
     "deploy:ccip:polygon": "npx hardhat run scripts/deploy_ccip.ts --network polygon",
@@ -32,7 +33,9 @@
     "deployFrame:ccip:mainnet": "npx hardhat run scripts/deploy_ccip_frame.ts --network mainnet",
     "deployFrame:ccip:polygon": "npx hardhat run scripts/deploy_ccip_frame.ts --network polygon",
     "deployFrame:ccip:gnosis": "npx hardhat run scripts/deploy_ccip_frame.ts --network gnosis",
-    "upgrade:ccip:mumbai": "npx hardhat run scripts/upgrade_ccip.ts --network polygonMumbai"
+    "upgrade:ccip:sepolia": "npx hardhat run scripts/upgrade_ccip.ts --network sepolia",
+    "upgrade:ccip:polygonMumbai": "npx hardhat run scripts/upgrade_ccip.ts --network polygonMumbai",
+    "upgrade:ccip:fuji": "npx hardhat run scripts/upgrade_ccip.ts --network fuji"
   },
   "author": "RealT Inc.",
   "license": "MIT",
