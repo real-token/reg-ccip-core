@@ -61,12 +61,12 @@ contract CCIPSenderReceiver is
     /// @param defaultAdmin The address of the default admin
     /// @param pauser The address of the pauser
     /// @param upgrader The address of the upgrader
-    /// @param router The address of the router contract
+    /// @param router The router contract
     function initialize(
         address defaultAdmin,
         address pauser,
         address upgrader,
-        address router
+        IRouterClient router
     ) external initializer {
         __Pausable_init();
         __AccessControl_init();
@@ -76,7 +76,7 @@ contract CCIPSenderReceiver is
         _grantRole(PAUSER_ROLE, pauser);
         _grantRole(UPGRADER_ROLE, upgrader);
 
-        _router = IRouterClient(router);
+        _router = router;
     }
 
     /**
@@ -210,14 +210,14 @@ contract CCIPSenderReceiver is
 
     /// @inheritdoc ICCIPSenderReceiver
     function setRouter(
-        address router
+        IRouterClient router
     )
         external
         override
         onlyRole(DEFAULT_ADMIN_ROLE)
-        validateContractAddress(router)
+        validateContractAddress(address(router))
     {
-        _router = IRouterClient(router);
+        _router = router;
         emit SetRouter(router);
     }
 
@@ -313,8 +313,8 @@ contract CCIPSenderReceiver is
     }
 
     /// @inheritdoc ICCIPSenderReceiver
-    function getRouter() external view override returns (address) {
-        return address(_router);
+    function getRouter() external view override returns (IRouterClient) {
+        return _router;
     }
 
     /// @inheritdoc ICCIPSenderReceiver

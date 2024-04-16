@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+
 /**
  * @title Interface of the REG CCIP Sender contract
  * @author @RealT
@@ -76,7 +78,7 @@ interface ICCIPSenderReceiver {
      * @dev Emitted when the CCIP router address is set
      * @param router The CCIP router address
      */
-    event SetRouter(address indexed router);
+    event SetRouter(IRouterClient indexed router);
 
     /**
      * @dev Updates the allowlist status of a destination chain for transactions
@@ -104,7 +106,7 @@ interface ICCIPSenderReceiver {
      * - Only callable by the DEFAULT_ADMIN_ROLE
      * @param router The CCIP router address
      */
-    function setRouter(address router) external;
+    function setRouter(IRouterClient router) external;
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
@@ -181,7 +183,7 @@ interface ICCIPSenderReceiver {
      * @notice Returns the CCIP router address
      * @return The CCIP router address
      */
-    function getRouter() external view returns (address);
+    function getRouter() external view returns (IRouterClient);
 
     /**
      * @notice Returns the LINK token address
