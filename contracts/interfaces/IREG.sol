@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+
 /**
  * @title Interface of the Real Estate Governance Token
  * @author @RealT
@@ -40,7 +42,10 @@ interface IREG {
      * @param token The token address that will be recovered
      * @param amount The amount of token to be recovered
      */
-    event RecoverByGovernance(address indexed token, uint256 indexed amount);
+    event RecoverByGovernance(
+        IERC20Upgradeable indexed token,
+        uint256 indexed amount
+    );
 
     /**
      * @notice Mint function for CCIP, only callable by MINTER_BRIDGE_ROLE
@@ -111,12 +116,12 @@ interface IREG {
      * @notice RecoverERC20, Transfer any ERC20 stored on the contract to a wallet, prevent mistakes
      * @dev recoverERC20 function
      * - require {DEFAULT_ADMIN_ROLE}
-     * @param tokenAddress address - token address to transfer
-     * @param tokenAmount token amount to be transfered
+     * @param token The token to be transferred
+     * @param amount The amount to be transfered
      * @return Return true on success
      */
     function recoverERC20(
-        address tokenAddress,
-        uint256 tokenAmount
+        IERC20Upgradeable token,
+        uint256 amount
     ) external returns (bool);
 }

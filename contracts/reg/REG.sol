@@ -175,11 +175,11 @@ contract REG is
 
     /// @inheritdoc IREG
     function recoverERC20(
-        address tokenAddress,
-        uint256 tokenAmount
+        IERC20Upgradeable token,
+        uint256 amount
     ) external override onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
-        IERC20Upgradeable(tokenAddress).safeTransfer(_msgSender(), tokenAmount);
-        emit RecoverByGovernance(tokenAddress, tokenAmount);
+        token.safeTransfer(_msgSender(), amount);
+        emit RecoverByGovernance(token, amount);
         return true;
     }
 
