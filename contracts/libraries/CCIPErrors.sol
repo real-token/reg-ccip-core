@@ -16,12 +16,13 @@ library CCIPErrors {
         uint256 value,
         bytes data
     ); // Used when the withdrawal of Ether fails.
+    error FailedToRefund(bytes data); // Used when the refund of Ether fails.
+    error AllowedStateNotChange();
     error DestinationChainNotAllowlisted(uint64 destinationChainSelector); // Used when the destination chain has not been allowlisted by the contract owner.
     error TokenNotAllowlisted(address token); // Used when the token has not been allowlisted by the contract owner.
     error InvalidReceiverAddress(); // Used when the receiver address is 0.
     error InvalidContractAddress(); // Used when a contract address is set to zero address.
     error InvalidFeeToken(address feeToken); // Used when the fee token is not LINK or zero address (native)
-    error AllowedStateNotChange();
     error InvalidRouter(address router); // Used when the router address is set to zero address.
     error InvalidSender(address sender); // Used when the sender address is not allowlisted.
 }

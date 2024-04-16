@@ -244,25 +244,25 @@ describe("CCIP", function () {
         deployer.ccip.withdraw(deployer.address)
       ).to.be.revertedWithCustomError(ccip, CCIPErrors.NothingToWithdraw);
 
-      const [donator] = await ethers.getSigners();
+      // const [donator] = await ethers.getSigners();
 
-      await donator.sendTransaction({
-        to: ccip.target,
-        value: ethers.parseEther("1"),
-      });
+      // await donator.sendTransaction({
+      //   to: ccip.target,
+      //   value: ethers.parseEther("1"),
+      // });
 
-      const balance = await ethers.provider.getBalance(ccip.target);
-      console.log("Ether balance of ccip", balance.toString());
+      // const balance = await ethers.provider.getBalance(ccip.target);
+      // console.log("Ether balance of ccip", balance.toString());
 
-      console.log(
-        "Ether balance of deployer before: ",
-        (await ethers.provider.getBalance(deployer.address)).toString()
-      );
-      await deployer.ccip.withdraw(deployer.address);
-      console.log(
-        "Ether balance of deployer after: ",
-        (await ethers.provider.getBalance(deployer.address)).toString()
-      );
+      // console.log(
+      //   "Ether balance of deployer before: ",
+      //   (await ethers.provider.getBalance(deployer.address)).toString()
+      // );
+      // await deployer.ccip.withdraw(deployer.address);
+      // console.log(
+      //   "Ether balance of deployer after: ",
+      //   (await ethers.provider.getBalance(deployer.address)).toString()
+      // );
     });
 
     it("6. withdrawToken", async function () {
@@ -579,6 +579,27 @@ describe("CCIP", function () {
           { value: fees }
         )
       ).to.emit(ccip, "TokensTransferred");
+
+      expect(await ethers.provider.getBalance(ccip.target)).to.be.eq(0);
+
+      // send tx with msg.value = 2* fees, CCIPSenderReceiver refunds exceeded Ether to user
+      await expect(
+        users[0].ccip.transferTokens(
+          CHAIN_SELECTOR_MUMBAI,
+          users[0].address,
+          reg.target,
+          1000,
+          ZERO_ADDRESS,
+          CCIP_GAS_LIMIT,
+          { value: fees * 2n }
+        )
+      ).to.emit(ccip, "TokensTransferred");
+
+      console.log(
+        "Ether balance of ccip after transfer",
+        (await ethers.provider.getBalance(ccip.target)).toString()
+      );
+      expect(await ethers.provider.getBalance(ccip.target)).to.be.eq(0);
     });
 
     it("11. transferTokensWithPermit using LINK: reverted cases", async function () {

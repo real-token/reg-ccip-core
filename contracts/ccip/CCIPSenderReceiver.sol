@@ -410,16 +410,25 @@ contract CCIPSenderReceiver is
         // Get the fee required to send the message
         uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
 
-        IERC20 tokenInstance = IERC20(token);
         // Transfer REG token from the user to this contract
-        tokenInstance.safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        tokenInstance.safeIncreaseAllowance(address(_router), amount);
+        IERC20(token).safeIncreaseAllowance(address(_router), amount);
 
         if (feeToken == address(0)) {
             // Check if msg.value is enough to pay for the fees
             if (fees > msg.value)
                 revert CCIPErrors.NotEnoughBalance(msg.value, fees);
+
+            // If the user sent more than the required fees, send the excess back
+            // Do not require strictly equal here, as the user may send more than the required fees, just return the excess
+            // Until here, user transfer token + fees to this contract, refund if msg.value > fees
+            if (msg.value > fees) {
+                (bool sent, bytes memory data) = msg.sender.call{
+                    value: msg.value - fees
+                }("");
+                if (!sent) revert CCIPErrors.FailedToRefund(data);
+            }
 
             // Send the message through the router and store the returned message ID
             // Safe to interact with Chainlink Router as it is a trusted contract
