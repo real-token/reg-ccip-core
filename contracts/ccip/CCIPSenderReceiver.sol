@@ -233,14 +233,15 @@ contract CCIPSenderReceiver is
 
         // Attempt to send the funds, capturing the success status and discarding any return data
         // This is considered safe because the beneficiary is chosen by admin
-        (bool sent, ) = beneficiary.call{value: amount}("");
+        (bool sent, bytes memory data) = beneficiary.call{value: amount}("");
 
         // Revert if the send failed, with information about the attempted transfer
         if (!sent)
             revert CCIPErrors.FailedToWithdrawEth(
                 msg.sender,
                 beneficiary,
-                amount
+                amount,
+                data
             );
     }
 
@@ -548,7 +549,6 @@ contract CCIPSenderReceiver is
     ) public view virtual override returns (bool) {
         return
             interfaceId == type(IAny2EVMMessageReceiver).interfaceId ||
-            interfaceId == type(IERC165).interfaceId ||
             super.supportsInterface(interfaceId);
     }
 
