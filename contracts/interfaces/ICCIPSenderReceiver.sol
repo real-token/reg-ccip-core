@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title Interface of the REG CCIP Sender contract
@@ -177,7 +178,7 @@ interface ICCIPSenderReceiver {
      * @param beneficiary The address to which the tokens will be sent
      * @param token The contract address of the ERC20 token to be withdrawn
      */
-    function withdrawToken(address beneficiary, address token) external;
+    function withdrawToken(address beneficiary, IERC20 token) external;
 
     /**
      * @notice Returns the CCIP router address

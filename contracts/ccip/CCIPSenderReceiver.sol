@@ -91,13 +91,6 @@ contract CCIPSenderReceiver is
     }
 
     /**
-     * @notice Receive function to allow the contract to receive Ether
-     * @dev This function has no function body, making it a default function for receiving Ether
-     * It is automatically called when Ether is transferred to the contract without any data
-     */
-    receive() external payable {}
-
-    /**
      * @dev Pause the contract if needed
      **/
     function pause() external onlyRole(PAUSER_ROLE) {
@@ -248,15 +241,15 @@ contract CCIPSenderReceiver is
     /// @inheritdoc ICCIPSenderReceiver
     function withdrawToken(
         address beneficiary,
-        address token
+        IERC20 token
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
-        uint256 amount = IERC20(token).balanceOf(address(this));
+        uint256 amount = token.balanceOf(address(this));
 
         // Revert if there is nothing to withdraw
         if (amount == 0) revert CCIPErrors.NothingToWithdraw();
 
-        IERC20(token).safeTransfer(beneficiary, amount);
+        token.safeTransfer(beneficiary, amount);
     }
 
     /// @inheritdoc ICCIPSenderReceiver
@@ -417,10 +410,11 @@ contract CCIPSenderReceiver is
         // Get the fee required to send the message
         uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
 
+        IERC20 tokenInstance = IERC20(token);
         // Transfer REG token from the user to this contract
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        tokenInstance.safeTransferFrom(msg.sender, address(this), amount);
         // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).safeIncreaseAllowance(address(_router), amount);
+        tokenInstance.safeIncreaseAllowance(address(_router), amount);
 
         if (feeToken == address(0)) {
             // Check if msg.value is enough to pay for the fees
