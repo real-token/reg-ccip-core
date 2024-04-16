@@ -48,9 +48,9 @@ contract CCIPSenderReceiver is
 
     mapping(address => AllowlistTokenState) private _allowlistedTokens;
 
-    uint64[] private _allowlistedChainsList;
+    uint64[] private _chainsListHistory;
 
-    address[] private _allowlistedTokensList;
+    address[] private _tokensListHistory;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -178,7 +178,7 @@ contract CCIPSenderReceiver is
         chainState.destinationChainReceiver = destinationChainReceiver;
 
         if (destinationChainReceiver != address(0) && !chainState.isInList) {
-            _allowlistedChainsList.push(destinationChainSelector);
+            _chainsListHistory.push(destinationChainSelector);
             chainState.isInList = true;
         }
 
@@ -202,7 +202,7 @@ contract CCIPSenderReceiver is
         tokenState.isAllowed = allowed;
 
         if (allowed && !tokenState.isInList) {
-            _allowlistedTokensList.push(token);
+            _tokensListHistory.push(token);
             tokenState.isInList = true;
         }
         emit AllowlistToken(token, allowed);
@@ -334,7 +334,7 @@ contract CCIPSenderReceiver is
         override
         returns (uint64[] memory)
     {
-        return _allowlistedChainsList;
+        return _chainsListHistory;
     }
 
     /// @inheritdoc ICCIPSenderReceiver
@@ -344,7 +344,7 @@ contract CCIPSenderReceiver is
         override
         returns (address[] memory)
     {
-        return _allowlistedTokensList;
+        return _tokensListHistory;
     }
 
     /// @inheritdoc ICCIPSenderReceiver
@@ -470,7 +470,7 @@ contract CCIPSenderReceiver is
      * @param receiver The address of the receiver
      * @param token The token to be transferred
      * @param amount The amount of the token to be transferred
-     * @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas
+     * @param feeToken The address of the token used for fees. Set address(0) for native gas
      * @param ccipReceiver The address of the CCIPSenderReceiver on the destination chain
      * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
      * @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message
@@ -479,7 +479,7 @@ contract CCIPSenderReceiver is
         address receiver,
         address token,
         uint256 amount,
-        address feeTokenAddress,
+        address feeToken,
         address ccipReceiver,
         uint256 gasLimit
     ) private pure returns (Client.EVM2AnyMessage memory) {
@@ -499,8 +499,8 @@ contract CCIPSenderReceiver is
                     // Setting gas limit for action on destination chain
                     Client.EVMExtraArgsV1({gasLimit: gasLimit})
                 ),
-                // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees
-                feeToken: feeTokenAddress
+                // Set the feeToken to a feeToken, indicating specific asset will be used for fees
+                feeToken: feeToken
             });
     }
 
