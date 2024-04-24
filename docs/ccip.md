@@ -103,4 +103,6 @@ ccipReceive:
 - verify source chain, sender, router address
 - emit event with all information for subgraph indexes
 
-Prepare manual execution according to Chainlink if the transfer failed to execute on destination chain
+Prepare manual execution according to Chainlink if the transfer failed to execute on destination chain (source: Chainlink)
+
+![Alt text](./assets/images/manual-execution.png "manual-execution")
