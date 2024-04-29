@@ -35,7 +35,15 @@
     "deployFrame:ccip:gnosis": "npx hardhat run scripts/deploy_ccip_frame.ts --network gnosis",
     "upgrade:ccip:sepolia": "npx hardhat run scripts/upgrade_ccip.ts --network sepolia",
     "upgrade:ccip:polygonMumbai": "npx hardhat run scripts/upgrade_ccip.ts --network polygonMumbai",
-    "upgrade:ccip:fuji": "npx hardhat run scripts/upgrade_ccip.ts --network fuji"
+    "upgrade:ccip:fuji": "npx hardhat run scripts/upgrade_ccip.ts --network fuji",
+    "deployC2d:reg:sepolia": "npx hardhat run scripts/deploy_c2d_reg.ts --network sepolia",
+    "deployC2d:reg:mainnet": "npx hardhat run scripts/deploy_c2d_reg.ts --network mainnet",
+    "deployC2d:reg:polygon": "npx hardhat run scripts/deploy_c2d_reg.ts --network polygon",
+    "deployC2d:reg:gnosis": "npx hardhat run scripts/deploy_c2d_reg.ts --network gnosis",
+    "deployFrameC2d:reg:sepolia": "npx hardhat run scripts/deploy_c2d_reg_Frame.ts --network sepolia",
+    "deployFrameC2d:reg:mainnet": "npx hardhat run scripts/deploy_c2d_reg_Frame.ts --network mainnet",
+    "deployFrameC2d:reg:polygon": "npx hardhat run scripts/deploy_c2d_reg_Frame.ts --network polygon",
+    "deployFrameC2d:reg:gnosis": "npx hardhat run scripts/deploy_c2d_reg_Frame.ts --network gnosis"
   },
   "author": "RealT Inc.",
   "license": "MIT",
@@ -52,6 +60,7 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^0.8.0",
-    "@chainlink/contracts-ccip": "^1.2.1"
+    "@chainlink/contracts-ccip": "^1.2.1",
+    "@inquirer/prompts": "^5.0.2"
   }
 }
