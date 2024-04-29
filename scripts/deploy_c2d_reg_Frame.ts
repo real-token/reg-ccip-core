@@ -1,4 +1,4 @@
-import { Interface, isAddress } from "ethers";
+import { Interface, isAddress } from "ethers/lib/utils";
 import hre, { ethers, network } from "hardhat";
 import { REG__factory } from "../typechain-types";
 import create2ABI from "./abis/create2.json";
@@ -15,7 +15,7 @@ export default async function main() {
   // const [admin] = await ethers.getSigners();
   console.log("Get hardware wallet provider");
 
-  const provider = new ethers.JsonRpcProvider(
+  const provider = new ethers.providers.JsonRpcProvider(
     "http://127.0.0.1:1248", // RPC FRAME
     {
       chainId: hre.network.config.chainId ?? 5,
@@ -23,7 +23,7 @@ export default async function main() {
     }
   );
 
-  const admin = await provider.getSigner();
+  const admin = provider.getSigner();
 
   const deployer = await admin.getAddress();
 
@@ -89,7 +89,7 @@ export default async function main() {
 
   const deployImpl = iface.encodeFunctionData("deploy", [
     "0",
-    ethers.encodeBytes32String(salt),
+    ethers.utils.formatBytes32String(salt),
     REG__factory.bytecode,
     "0x",
   ]);
@@ -102,13 +102,13 @@ export default async function main() {
     from: deployer,
   });
 
-  console.log("Finished transaction 1");
+  console.log("Sending transaction 1");
 
   console.log("Transaction 1 hash: ", tx1.hash);
   const receipt1 = await tx1.wait(1);
 
   console.log("Decode event log of transaction 1");
-  console.log("Receipt 1: ", receipt1.logs);
+  // console.log("Receipt 1: ", receipt1.logs);
 
   // Event: Deployed(newContract, salt, keccak256(bytecode))
   const createdImpl = iface.decodeEventLog(
@@ -123,7 +123,7 @@ export default async function main() {
 
   const deployProxy = iface.encodeFunctionData("deploy", [
     "0",
-    ethers.encodeBytes32String(salt),
+    ethers.utils.formatBytes32String(salt),
     (await proxy.getDeployTransaction(createdImpl, "0x")).data,
     initializePayload,
   ]);
@@ -138,7 +138,7 @@ export default async function main() {
   console.log("Transaction 2 hash: ", tx2.hash);
 
   const receipt2 = await tx2.wait(1);
-  console.log("Receipt 2: ", receipt2.logs);
+  // console.log("Receipt 2: ", receipt2.logs);
 
   console.log("Decode event log of transaction 2");
   // Event: Deployed(newContract, salt, keccak256(bytecode))
@@ -148,6 +148,26 @@ export default async function main() {
     receipt2.logs[6].topics
   )[0];
   console.log("Proxy deployed at address: ", proxyAddress);
+
+  // Verify the implementation contract
+  try {
+    await run("verify:verify", {
+      address: createdImpl,
+      constructorArguments: [],
+    });
+  } catch (err) {
+    console.log(err);
+  }
+
+  // Verify the proxy contract
+  try {
+    await run("verify:verify", {
+      address: proxyAddress,
+      constructorArguments: [createdImpl, "0x"], // (implementation, "0x")
+    });
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 // We recommend this pattern to be able to use async/await everywhere

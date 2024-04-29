@@ -48,15 +48,16 @@
   "author": "RealT Inc.",
   "license": "MIT",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
     "@openzeppelin/contracts": "^4.9.6",
     "@openzeppelin/contracts-upgradeable": "^4.9.6",
-    "@openzeppelin/hardhat-upgrades": "^3.0.5",
+    "@openzeppelin/hardhat-upgrades": "^1.22.1",
     "dotenv": "^16.4.5",
-    "hardhat": "^2.21.0",
+    "ethers": "^5.7.2",
+    "hardhat": "^2.13.0",
     "hardhat-contract-sizer": "^2.10.0",
     "hardhat-dependency-compiler": "^1.1.3",
-    "hardhat-deploy": "^0.12.2"
+    "hardhat-deploy": "^0.11.25"
   },
   "dependencies": {
     "@chainlink/contracts": "^0.8.0",
