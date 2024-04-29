@@ -22,11 +22,11 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.19", // TODO back to 0.8.20 after testing, 0.8.19 required to deploy Chainlink Architecture
+        version: "0.8.20", // TODO back to 0.8.20 after testing, 0.8.19 required to deploy Chainlink Architecture
         settings: {
           optimizer: {
             enabled: true,
-            runs: 10000, // TODO back to 100000 after testing (10000 required to deploy Chainlink OnRamp)
+            runs: 100000, // TODO back to 100000 after testing (10000 required to deploy Chainlink OnRamp)
           },
         },
       },
@@ -34,15 +34,15 @@ const config: HardhatUserConfig = {
   },
   dependencyCompiler: {
     paths: [
-      "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/ARM.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/ARMProxy.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/CommitStore.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/PriceRegistry.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/Router.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/pools/BurnMintTokenPool.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/onRamp/EVM2EVMOnRamp.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/offRamp/EVM2EVMOffRamp.sol",
+      // "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/ARM.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/ARMProxy.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/CommitStore.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/PriceRegistry.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/Router.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/pools/BurnMintTokenPool.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/onRamp/EVM2EVMOnRamp.sol",
+      // "@chainlink/contracts-ccip/src/v0.8/ccip/offRamp/EVM2EVMOffRamp.sol",
     ],
   },
   namedAccounts: {
