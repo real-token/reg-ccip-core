@@ -3,7 +3,6 @@ import hre, { ethers, network } from "hardhat";
 import { REG__factory } from "../typechain-types";
 import create2ABI from "./abis/create2.json";
 import { validate } from "./utils/c2d-utils";
-import { ZERO_ADDRESS } from "../helpers/constants";
 import { input } from "@inquirer/prompts";
 
 export default async function main() {

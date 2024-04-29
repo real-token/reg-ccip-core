@@ -68,7 +68,7 @@ const config: HardhatUserConfig = {
       mainnet: process.env.ETHERSCAN_API_KEY as string,
       sepolia: process.env.ETHERSCAN_API_KEY as string,
       gnosis: process.env.GNOSISSCAN_API_KEY as string,
-      matic: process.env.POLYGONSCAN_API_KEY as string,
+      polygon: process.env.POLYGONSCAN_API_KEY as string,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY as string,
       avalancheFujiTestnet: process.env.AVAXSCAN_API_KEY as string,
     },
