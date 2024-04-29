@@ -4,6 +4,7 @@ import { REG__factory } from "../typechain-types";
 import create2ABI from "./abis/create2.json";
 import { validate } from "./utils/c2d-utils";
 import { input } from "@inquirer/prompts";
+import { importRegFromC2d } from "../helpers/forceImports";
 
 export default async function main() {
   if (!create2ABI) throw new Error("CREATE2 abi not found");
@@ -167,6 +168,9 @@ export default async function main() {
   } catch (err) {
     console.log(err);
   }
+
+  console.log("Importing contract to force imports");
+  await importRegFromC2d(proxyAddress);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
