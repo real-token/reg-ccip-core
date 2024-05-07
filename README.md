@@ -6,7 +6,6 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
-[![Build pass](https://github.com/real-token/reg-ccip-core/actions/workflows/node.js.yml/badge.svg)](https://github.com/real-token/reg-ccip-core/actions/workflows/node.js.yml)
 [![Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
 <!-- PROJECT LOGO -->
@@ -98,6 +97,13 @@
 
 ## Roadmap
 
+This repo contains:
+
+- REG contract (RealToken Ecosystem Governance token)
+- CCIPSenderReceiver contract (to integrate with Chainlink CCIP for cross-chain transfer).
+
+Roadmap:
+
 - RealToken Ecosystem Governance ✅
 - CCIP (cross-chain) ✅
 - Testing ✅
@@ -115,7 +121,7 @@ See the [open issues](https://github.com/real-token/reg-ccip-core/issues) for a 
 Before running test:
 
 - Go to hardhat.config.ts and change solidity version to 0.8.19 and optimizer run to 10000 times to be able to compile Chainlink contracts.
-- We assigned the addresses of LINK and Wrapped native token as constants in the contract for gas optimization. Therefore, before running test, we need to adapt the address of LINK and WrappedNativeToken in the contract to thoses addresses on Hardhat.
+- We assigned the addresses of LINK and Wrapped native token as constants in the CCIPSenderReceiver contract for gas optimization. Therefore, before running test, we need to adapt the address of LINK and WrappedNativeToken in the contract to thoses addresses on Hardhat.
 
 ```
 address private constant \_linkToken =
@@ -146,15 +152,19 @@ npx hardhat test
 
 ## Deployments
 
+Follow these steps for deployments:
+
 ```
-- Setup addresses of LINK/WrappedNative in contract
+- Setup addresses of LINK/WrappedNative in CCIPSenderReceiver contract
 - Set up ADMIN/UPGRADER in .env
 - Set up ROUTER in .env for each chain
-- Deploy CCIPSenderReceiver on Sepolia
-- Deploy CCIPSenderReceiver on Mumbai
-- allowlistToken
-- allowlistDestinationChain
+- Deploy CCIPSenderReceiver on the first chain (for example, Sepolia)
+- Deploy CCIPSenderReceiver on the second chain (for example, Mumbai)
+- allowlistToken to whitelist tokens which can be transferred cross-chain
+- allowlistDestinationChain to whitelist destination chains
 ```
+
+Please refer to [Chainlink CCIP docs](https://docs.chain.link/ccip/supported-networks) to get information about chain selector.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
