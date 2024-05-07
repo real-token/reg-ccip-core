@@ -94,18 +94,6 @@
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
-<!-- USAGE EXAMPLES -->
-
-## Usage
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-<!-- AUDIT -->
-
-## Audit
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
 <!-- ROADMAP -->
 
 ## Roadmap
@@ -114,10 +102,27 @@
 - CCIP (cross-chain) ✅
 - Testing ✅
 - Static analysis (Slither) ✅
-- Fuzzing (Echidna) ❌
-- Audit ❌
+- Audit ✅
 
 See the [open issues](https://github.com/real-token/reg-ccip-core/issues) for a full list of proposed features (and known issues).
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+<!-- USAGE EXAMPLES -->
+
+## Usage
+
+Before running test:
+
+- Go to hardhat.config.ts and change solidity version to 0.8.19 and optimizer run to 10000 times to be able to compile Chainlink contracts.
+- We assigned the addresses of LINK and Wrapped native token as constants in the contract for gas optimization. Therefore, before running test, we need to adapt the address of LINK and WrappedNativeToken in the contract to thoses addresses on Hardhat.
+
+```
+address private constant \_linkToken =
+0x5FC8d32690cc91D4c39d9d3abcBD16989F875707; // LINK on Hardhat
+address private constant \_wrappedNativeToken =
+0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9; // WETH on Hardhat
+```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -150,6 +155,14 @@ npx hardhat test
 - allowlistToken
 - allowlistDestinationChain
 ```
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+<!-- AUDIT -->
+
+## Audit
+
+The REG and CCIPSenderReceiver contracts are audited by ABDK. The report can be found [here](./audit/ABDK_RealT_RegCcipCore_v_1_0.pdf).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
