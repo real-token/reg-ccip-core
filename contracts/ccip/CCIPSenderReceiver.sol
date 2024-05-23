@@ -39,7 +39,6 @@ contract CCIPSenderReceiver is
 
     address private constant _linkToken =
         0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
-
     address private constant _wrappedNativeToken =
         0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
 
