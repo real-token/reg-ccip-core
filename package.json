@@ -47,7 +47,8 @@
     "deployFrameC2d:ccip:sepolia": "npx hardhat run scripts/deploy_c2d_ccip_Frame.ts --network sepolia",
     "deployFrameC2d:ccip:mainnet": "npx hardhat run scripts/deploy_c2d_ccip_Frame.ts --network mainnet",
     "deployFrameC2d:ccip:polygon": "npx hardhat run scripts/deploy_c2d_ccip_Frame.ts --network polygon",
-    "deployFrameC2d:ccip:gnosis": "npx hardhat run scripts/deploy_c2d_ccip_Frame.ts --network gnosis"
+    "deployFrameC2d:ccip:gnosis": "npx hardhat run scripts/deploy_c2d_ccip_Frame.ts --network gnosis",
+    "upgrade:regV2:sepolia": "npx hardhat run scripts/upgrade_regV2.ts --network sepolia"
   },
   "author": "RealT Inc.",
   "license": "MIT",
