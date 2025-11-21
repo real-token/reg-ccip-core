@@ -28,6 +28,7 @@ const config: HardhatUserConfig = {
             enabled: true,
             runs: 10000, // TODO back to 100000 after testing (10000 required to deploy Chainlink OnRamp)
           },
+          evmVersion: `shanghai`, // downgrade to `paris` if you encounter 'invalid opcode' error
         },
       },
     ],
@@ -68,7 +69,7 @@ const config: HardhatUserConfig = {
       mainnet: process.env.ETHERSCAN_API_KEY as string,
       sepolia: process.env.ETHERSCAN_API_KEY as string,
       gnosis: process.env.GNOSISSCAN_API_KEY as string,
-      matic: process.env.POLYGONSCAN_API_KEY as string,
+      polygon: process.env.POLYGONSCAN_API_KEY as string,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY as string,
       avalancheFujiTestnet: process.env.AVAXSCAN_API_KEY as string,
     },

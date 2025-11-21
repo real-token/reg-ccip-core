@@ -1,0 +1,52 @@
+// Replace these addresses in the CCIPSenderReceiver contract for each chain
+address private constant _linkToken =
+    0xE2e73A1c69ecF83F464EFCE6A5be353a37cA09b2; // LINK on Gnosis
+address private constant _wrappedNativeToken =
+    0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d; // WXDAI on Gnosis
+
+address private constant _linkToken =
+    0xb0897686c545045aFc77CF20eC7A532E3120E0F1; // LINK on Polygon
+address private constant _wrappedNativeToken =
+    0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270; // WMATIC on Polygon
+
+address private constant _linkToken =
+    0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
+address private constant _wrappedNativeToken =
+    0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
+
+Run: 
+npm run deployFrameC2d:ccip:gnosis
+npm run deployFrameC2d:ccip:polygon
+npm run deployFrameC2d:ccip:mainnet
+
+// Allowlist destination chain: 
+On Gnosis: 
+- Ethereum chainSelector: 5009297550715157269
+	Ethereum router: 0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D
+- Polygon chainSelector: 4051577828743386545
+	Polygon router: 0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe
+
+
+On Polygon:
+- Gnosis chainSelector: 465200170687744372
+	Gnosis router: 0x4aAD6071085df840abD9Baf1697d5D5992bDadce
+- Ethereum chainSelector: 5009297550715157269
+	Ethereum router: 0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D
+
+
+On Ethereum: 
+- Gnosis chainSelector: 465200170687744372
+	Gnosis router: 0x4aAD6071085df840abD9Baf1697d5D5992bDadce
+- Polygon chainSelector: 4051577828743386545
+	Polygon router: 0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe
+
+Create2Deploy: 0x13385924683d2a2D0ff5D54e3524EbE2D1dE79C3
+
+Admin: 0x5Fc96c182Bb7E0413c08e8e03e9d7EFc6cf0B099
+Upgrader: 0x5Fc96c182Bb7E0413c08e8e03e9d7EFc6cf0B099
+Pauser: 0x5Fc96c182Bb7E0413c08e8e03e9d7EFc6cf0B099
+
+CCIP Déployed
+- Gnosis: 0xb98CA8Cbb6f95a8f0e2B0d988E52BdB0eA1e6d04
+- Polygon: 0x71d05F0A2D068783f5973D9A06f874c3976333Db
+- Ethereum: 0x24d9783B185C93b8D9835C00fB3C8C2Ae4E0CDCc

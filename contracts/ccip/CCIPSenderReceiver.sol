@@ -10,7 +10,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
-import {IERC165} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.0/contracts/utils/introspection/IERC165.sol";
+import {IERC165} from "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/utils/introspection/IERC165.sol";
 import {CCIPErrors} from "../libraries/CCIPErrors.sol";
 import {ICCIPSenderReceiver} from "../interfaces/ICCIPSenderReceiver.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
@@ -39,7 +39,6 @@ contract CCIPSenderReceiver is
 
     address private constant _linkToken =
         0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
-
     address private constant _wrappedNativeToken =
         0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
 

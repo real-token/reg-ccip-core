@@ -1,10 +1,10 @@
 import { Interface, isAddress } from "ethers/lib/utils";
 import hre, { ethers, network } from "hardhat";
-import { REG__factory } from "../typechain-types";
+import { CCIPSenderReceiver__factory } from "../typechain-types";
 import create2ABI from "./abis/create2.json";
 import { validate } from "./utils/c2d-utils";
 import { input } from "@inquirer/prompts";
-import { importRegFromC2d } from "../helpers/forceImports";
+import { importCcipFromC2d } from "../helpers/forceImports";
 
 export default async function main() {
   if (!create2ABI) throw new Error("CREATE2 abi not found");
@@ -30,7 +30,9 @@ export default async function main() {
   console.log("Using hardware wallet: ", deployer);
 
   // Get the implementation contract
-  const contract = (await ethers.getContractFactory("REG")).connect(admin);
+  const contract = (
+    await ethers.getContractFactory("CCIPSenderReceiver")
+  ).connect(admin);
 
   // Get the proxy contract
   const proxy = (await ethers.getContractFactory("ERC1967Proxy")).connect(
@@ -52,13 +54,13 @@ export default async function main() {
     validate,
   });
 
-  const MINTER = await input({
-    message: "Enter the minter address",
+  const UPGRADER = await input({
+    message: "Enter the upgrader address",
     validate,
   });
 
-  const UPGRADER = await input({
-    message: "Enter the upgrader address",
+  const ROUTER = await input({
+    message: "Enter the router address",
     validate,
   });
 
@@ -68,7 +70,7 @@ export default async function main() {
   if (!DEFAULT_ADMIN)
     throw new Error("please run command with DEFAULT_ADMIN=0x... prefix");
   if (!PAUSER) throw new Error("please run command with PAUSER=0x... prefix");
-  if (!MINTER) throw new Error("please run command with MINTER=0x... prefix");
+  if (!ROUTER) throw new Error("please run command with ROUTER=0x... prefix");
   if (!UPGRADER)
     throw new Error("please run command with UPGRADER=0x... prefix");
 
@@ -76,7 +78,7 @@ export default async function main() {
   if (!isAddress(DEFAULT_ADMIN))
     throw new Error("DEFAULT_ADMIN env var is not an address");
   if (!isAddress(PAUSER)) throw new Error("PAUSER env var is not an address");
-  if (!isAddress(MINTER)) throw new Error("MINTER env var is not an address");
+  if (!isAddress(ROUTER)) throw new Error("ROUTER env var is not an address");
   if (!isAddress(UPGRADER))
     throw new Error("UPGRADER env var is not an address");
 
@@ -84,13 +86,13 @@ export default async function main() {
 
   const initializePayload = contract.interface.encodeFunctionData(
     "initialize",
-    [DEFAULT_ADMIN, PAUSER, MINTER, UPGRADER]
+    [DEFAULT_ADMIN, PAUSER, UPGRADER, ROUTER]
   );
 
   const deployImpl = iface.encodeFunctionData("deploy", [
     "0",
     ethers.utils.formatBytes32String(salt),
-    REG__factory.bytecode,
+    CCIPSenderReceiver__factory.bytecode,
     "0x",
   ]);
 
@@ -144,8 +146,8 @@ export default async function main() {
   // Event: Deployed(newContract, salt, keccak256(bytecode))
   const proxyAddress = iface.decodeEventLog(
     "Deployed",
-    receipt2.logs[6].data,
-    receipt2.logs[6].topics
+    receipt2.logs[5].data,
+    receipt2.logs[5].topics
   )[0];
   console.log("Proxy deployed at address: ", proxyAddress);
 
@@ -170,7 +172,7 @@ export default async function main() {
   }
 
   console.log("Importing contract to force imports");
-  await importRegFromC2d(proxyAddress);
+  await importCcipFromC2d(proxyAddress);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

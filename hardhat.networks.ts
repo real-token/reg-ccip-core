@@ -46,9 +46,9 @@ if (process.env.GNOSIS_RPC_URL && process.env.PRIVATE_KEY) {
   };
 }
 
-if (process.env.MATIC_RPC_URL && process.env.PRIVATE_KEY) {
-  networks.matic = {
-    url: process.env.MATIC_RPC_URL,
+if (process.env.POLYGON_RPC_URL && process.env.PRIVATE_KEY) {
+  networks.polygon = {
+    url: process.env.POLYGON_RPC_URL,
     chainId: 137,
     gasPrice: "auto",
     accounts: [process.env.PRIVATE_KEY],
