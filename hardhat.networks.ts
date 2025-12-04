@@ -1,8 +1,8 @@
-import { NetworksUserConfig } from "hardhat/types";
+import type { HardhatUserConfig } from "hardhat/config";
 import * as dotenv from "dotenv";
 dotenv.config();
 
-const networks: NetworksUserConfig | undefined = {};
+const networks: Record<string, HardhatUserConfig> = {};
 const FORK = process.env.FORK || "";
 const FORK_BLOCK_NUMBER = process.env.FORK_BLOCK_NUMBER
   ? parseInt(process.env.FORK_BLOCK_NUMBER)
@@ -10,13 +10,16 @@ const FORK_BLOCK_NUMBER = process.env.FORK_BLOCK_NUMBER
 
 if (FORK) {
   networks.hardhat = {
+    type: "http",
     forking: {
       url: process.env.MAINNET_RPC_URL || "",
       blockNumber: FORK_BLOCK_NUMBER,
     },
   };
 } else {
-  networks.hardhat = {};
+  networks.hardhat = {
+    type: "http",
+  };
 }
 
 if (process.env.MAINNET_RPC_URL && process.env.PRIVATE_KEY) {
