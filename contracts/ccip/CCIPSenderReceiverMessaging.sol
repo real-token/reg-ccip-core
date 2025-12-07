@@ -12,7 +12,7 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {CCIPErrors} from "../libraries/CCIPErrors.sol";
-import {ICCIPSenderReceiver} from "../interfaces/ICCIPSenderReceiver.sol";
+import {ICCIPSenderReceiverMessaging} from "../interfaces/ICCIPSenderReceiverMessaging.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 
 /**
@@ -24,7 +24,7 @@ contract CCIPSenderReceiver is
     PausableUpgradeable,
     AccessControlUpgradeable,
     UUPSUpgradeable,
-    ICCIPSenderReceiver,
+    ICCIPSenderReceiverMessaging,
     IAny2EVMMessageReceiver
 {
     using SafeERC20 for IERC20;
@@ -409,10 +409,9 @@ contract CCIPSenderReceiver is
         // Get the fee required to send the message
         uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
 
-        // Transfer REG token from the user to this contract
+        // Transfer REG token from the user to this contract then burn it
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-        IERC20(token).safeIncreaseAllowance(address(_router), amount);
+        IMintableBurnableERC20(token).burn(amount);
 
         if (feeToken == address(0)) {
             // Check if msg.value is enough to pay for the fees
@@ -485,18 +484,12 @@ contract CCIPSenderReceiver is
         address ccipReceiver,
         uint256 gasLimit
     ) private pure returns (Client.EVM2AnyMessage memory) {
-        // Set the token amounts
-        Client.EVMTokenAmount[]
-            memory tokenAmounts = new Client.EVMTokenAmount[](1);
-        tokenAmounts[0] = Client.EVMTokenAmount({token: token, amount: amount});
-        bytes memory data = abi.encode(receiver);
-
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         return
             Client.EVM2AnyMessage({
                 receiver: abi.encode(ccipReceiver), // ABI-encoded receiver address
-                data: data, // No data
-                tokenAmounts: tokenAmounts, // The amount and type of token being transferred
+                data: abi.encode(token, amount, receiver);, // Encode the data with complete information for destination chain
+                tokenAmounts: new Client.EVMTokenAmount[](0), // Empty array as no tokens are transferred
                 extraArgs: Client._argsToBytes(
                     // Setting gas limit for action on destination chain
                     Client.EVMExtraArgsV1({gasLimit: gasLimit})
@@ -563,7 +556,9 @@ contract CCIPSenderReceiver is
         bytes32 messageId = message.messageId; // fetch the messageId
         uint64 sourceChainSelector = message.sourceChainSelector; // fetch the source chain selector
         address sender = abi.decode(message.sender, (address)); // abi-decoding of the CCIPSender address
-
+        (address token, uint256 amount, address receiver) = abi.decode(message.data, (address, uint256, address));
+        
+				// Validate the sender is allowlisted
         if (
             _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
             sender
@@ -571,16 +566,9 @@ contract CCIPSenderReceiver is
             revert CCIPErrors.InvalidSender(sender);
         }
 
-        address receiver = abi.decode(message.data, (address)); // abi-decoding of the receiver's address
-
-        // Collect tokens transferred. This increases this contract's balance for that Token.
-        Client.EVMTokenAmount[] memory tokenAmounts = message.destTokenAmounts;
-
-        address token = tokenAmounts[0].token;
-        uint256 amount = tokenAmounts[0].amount;
 
         // Transfer the token to the receiver
-        IERC20(token).safeTransfer(receiver, amount);
+        IERC20(token).mint(receiver, amount);
 
         // Emit an event with the message details
         emit TokensReceived(
