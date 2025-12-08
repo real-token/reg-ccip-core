@@ -1,0 +1,42 @@
+[profile.default]
+src = 'contracts'
+out = 'out'
+libs = ['node_modules', 'lib']
+test = 'test-foundry'
+cache_path  = 'cache_forge'
+no_match_coverage="script|test-foundry|contracts/(imports|interfaces|libraries|mocks|reg)"
+
+# run tests in parallel forks
+forks = [
+  { name = "eth",   endpoint = "ethereum", block_number = 22_000_000 },
+  { name = "gno",   endpoint = "gnosis",   block_number = 41_000_000 }
+]
+
+# Enable ffi, ast, build info and storage layout for openzeppelin-foundry-upgrades
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+
+solc_version="0.8.24"
+optimizer_runs=100000
+optimizer_enabled=true
+
+[fuzz]
+runs = 10000
+
+remappings = [
+  '@openzeppelin/contracts=node_modules/@openzeppelin/contracts',
+	'@openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable'
+	# '@openzeppelin/foundry-upgrades=node_modules/@openzeppelin/foundry-upgrades'
+]
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
+gnosis = { key = "${GNOSIS_API_KEY}" }
+
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+sepolia = "${SEPOLIA_RPC_URL}"
+gnosis = "${GNOSIS_RPC_URL}"

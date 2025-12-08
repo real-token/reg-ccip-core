@@ -28,7 +28,7 @@ const config: HardhatUserConfig = {
             enabled: true,
             runs: 10000, // TODO back to 100000 after testing (10000 required to deploy Chainlink OnRamp)
           },
-          evmVersion: `shanghai`, // downgrade to `paris` if you encounter 'invalid opcode' error
+          evmVersion: `paris`, // downgrade to `paris` if you encounter 'invalid opcode' error
         },
       },
     ],

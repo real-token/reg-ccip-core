@@ -12,15 +12,16 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {CCIPErrors} from "../libraries/CCIPErrors.sol";
-import {ICCIPSenderReceiverMessaging} from "../interfaces/ICCIPSenderReceiverMessaging.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
+import {IMintableBurnableERC20} from "../interfaces/IMintableBurnableERC20.sol";
+import {ICCIPSenderReceiverMessaging} from "../interfaces/ICCIPSenderReceiverMessaging.sol";
 
 /**
- * @title CCIPSenderReceiver
+ * @title CCIPSenderReceiverMessaging
  * @author RealT, version of RealT CCIP Sender based on Chainlink CCIP
  * @notice The contract of REG CCIP Sender for cross-chain token transfers
  */
-contract CCIPSenderReceiver is
+contract CCIPSenderReceiverMessaging is
     PausableUpgradeable,
     AccessControlUpgradeable,
     UUPSUpgradeable,
@@ -28,19 +29,17 @@ contract CCIPSenderReceiver is
     IAny2EVMMessageReceiver
 {
     using SafeERC20 for IERC20;
+    using SafeERC20 for IMintableBurnableERC20;
 
-    bytes32 public constant PAUSER_ROLE =
-        0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a; // = keccak256("PAUSER_ROLE")
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    bytes32 public constant UPGRADER_ROLE =
-        0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3; // = keccak256("UPGRADER_ROLE")
+    bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
+
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     IRouterClient private _router;
-
-    address private constant _linkToken =
-        0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
-    address private constant _wrappedNativeToken =
-        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
+    address private _linkToken;
+    address private _wrappedNativeToken;
 
     // Mapping to keep track of allowlisted destination chains
     mapping(uint64 => AllowlistChainState) private _allowlistedChains;
@@ -59,13 +58,19 @@ contract CCIPSenderReceiver is
     /// @notice Initializes the contract
     /// @param defaultAdmin The address of the default admin
     /// @param pauser The address of the pauser
+    /// @param unpauser The address of the unpauser
     /// @param upgrader The address of the upgrader
     /// @param router The router contract
+    /// @param linkToken The LINK token address
+    /// @param wrappedNativeToken The wrapped native token address
     function initialize(
         address defaultAdmin,
         address pauser,
+        address unpauser,
         address upgrader,
-        IRouterClient router
+        IRouterClient router,
+        address linkToken,
+        address wrappedNativeToken
     ) external initializer {
         __Pausable_init();
         __AccessControl_init();
@@ -73,9 +78,12 @@ contract CCIPSenderReceiver is
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(PAUSER_ROLE, pauser);
+        _grantRole(UNPAUSER_ROLE, unpauser);
         _grantRole(UPGRADER_ROLE, upgrader);
 
         _router = router;
+        _linkToken = linkToken;
+        _wrappedNativeToken = wrappedNativeToken;
     }
 
     /**
@@ -99,7 +107,7 @@ contract CCIPSenderReceiver is
     /**
      * @dev Unpause the contract if needed
      **/
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    function unpause() external onlyRole(UNPAUSER_ROLE) {
         _unpause();
     }
 
@@ -154,7 +162,7 @@ contract CCIPSenderReceiver is
         _;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function allowlistDestinationChain(
         uint64 destinationChainSelector,
         address destinationChainReceiver
@@ -180,7 +188,7 @@ contract CCIPSenderReceiver is
         );
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function allowlistToken(
         address token,
         bool allowed
@@ -200,7 +208,7 @@ contract CCIPSenderReceiver is
         emit AllowlistToken(token, allowed);
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function setRouter(
         IRouterClient router
     )
@@ -213,7 +221,7 @@ contract CCIPSenderReceiver is
         emit SetRouter(router);
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function withdraw(
         address beneficiary
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -237,7 +245,7 @@ contract CCIPSenderReceiver is
             );
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function withdrawToken(
         address beneficiary,
         IERC20 token
@@ -251,7 +259,7 @@ contract CCIPSenderReceiver is
         token.safeTransfer(beneficiary, amount);
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function transferTokens(
         uint64 destinationChainSelector,
         address receiver,
@@ -271,7 +279,7 @@ contract CCIPSenderReceiver is
             );
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function transferTokensWithPermit(
         uint64 destinationChainSelector,
         address receiver,
@@ -304,22 +312,22 @@ contract CCIPSenderReceiver is
             );
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function getRouter() external view override returns (IRouterClient) {
         return _router;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
-    function getLinkToken() external pure override returns (address) {
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getLinkToken() external view override returns (address) {
         return _linkToken;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
-    function getWrappedNativeToken() external pure override returns (address) {
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getWrappedNativeToken() external view override returns (address) {
         return _wrappedNativeToken;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function getAllowlistedDestinationChains()
         external
         view
@@ -329,7 +337,7 @@ contract CCIPSenderReceiver is
         return _chainsListHistory;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function getAllowlistedTokens()
         external
         view
@@ -339,7 +347,7 @@ contract CCIPSenderReceiver is
         return _tokensListHistory;
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function isAllowlistedDestinationChain(
         uint64 destinationChainSelector
     ) external view override returns (bool) {
@@ -348,7 +356,7 @@ contract CCIPSenderReceiver is
                 .destinationChainReceiver != address(0);
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function isAllowlistedToken(
         address token
     ) external view override returns (bool) {
@@ -488,7 +496,7 @@ contract CCIPSenderReceiver is
         return
             Client.EVM2AnyMessage({
                 receiver: abi.encode(ccipReceiver), // ABI-encoded receiver address
-                data: abi.encode(token, amount, receiver);, // Encode the data with complete information for destination chain
+                data: abi.encode(token, amount, receiver), // Encode the data with complete information for destination chain
                 tokenAmounts: new Client.EVMTokenAmount[](0), // Empty array as no tokens are transferred
                 extraArgs: Client._argsToBytes(
                     // Setting gas limit for action on destination chain
@@ -499,7 +507,7 @@ contract CCIPSenderReceiver is
             });
     }
 
-    /// @inheritdoc ICCIPSenderReceiver
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function getCcipFeesEstimation(
         uint64 destinationChainSelector,
         address receiver,
@@ -556,9 +564,12 @@ contract CCIPSenderReceiver is
         bytes32 messageId = message.messageId; // fetch the messageId
         uint64 sourceChainSelector = message.sourceChainSelector; // fetch the source chain selector
         address sender = abi.decode(message.sender, (address)); // abi-decoding of the CCIPSender address
-        (address token, uint256 amount, address receiver) = abi.decode(message.data, (address, uint256, address));
-        
-				// Validate the sender is allowlisted
+        (address token, uint256 amount, address receiver) = abi.decode(
+            message.data,
+            (address, uint256, address)
+        );
+
+        // Validate the sender is allowlisted
         if (
             _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
             sender
@@ -566,9 +577,8 @@ contract CCIPSenderReceiver is
             revert CCIPErrors.InvalidSender(sender);
         }
 
-
         // Transfer the token to the receiver
-        IERC20(token).mint(receiver, amount);
+        IMintableBurnableERC20(token).mint(receiver, amount);
 
         // Emit an event with the message details
         emit TokensReceived(

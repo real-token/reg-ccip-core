@@ -190,13 +190,13 @@ interface ICCIPSenderReceiverMessaging {
      * @notice Returns the LINK token address
      * @return The LINK token address
      */
-    function getLinkToken() external pure returns (address);
+    function getLinkToken() external view returns (address);
 
     /**
      * @notice Returns the wrapped native token address (WETH, WMATIC, WXDAI)
      * @return The wrapped native token address
      */
-    function getWrappedNativeToken() external pure returns (address);
+    function getWrappedNativeToken() external view returns (address);
 
     /**
      * @notice Returns the allowlist of destination chains
