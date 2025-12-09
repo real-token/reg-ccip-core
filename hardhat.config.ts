@@ -36,14 +36,14 @@ const config: HardhatUserConfig = {
   dependencyCompiler: {
     paths: [
       "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/ARM.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/ARMProxy.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/CommitStore.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/PriceRegistry.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/Router.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/pools/BurnMintTokenPool.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/onRamp/EVM2EVMOnRamp.sol",
-      "@chainlink/contracts-ccip/src/v0.8/ccip/offRamp/EVM2EVMOffRamp.sol",
+      "@chainlink/contracts-ccip/contracts/ARM.sol",
+      "@chainlink/contracts-ccip/contracts/ARMProxy.sol",
+      "@chainlink/contracts-ccip/contracts/CommitStore.sol",
+      "@chainlink/contracts-ccip/contracts/PriceRegistry.sol",
+      "@chainlink/contracts-ccip/contracts/Router.sol",
+      "@chainlink/contracts-ccip/contracts/pools/BurnMintTokenPool.sol",
+      "@chainlink/contracts-ccip/contracts/onRamp/EVM2EVMOnRamp.sol",
+      "@chainlink/contracts-ccip/contracts/offRamp/EVM2EVMOffRamp.sol",
     ],
   },
   namedAccounts: {

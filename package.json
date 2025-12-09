@@ -65,8 +65,9 @@
     "hardhat-deploy": "^0.11.25"
   },
   "dependencies": {
-    "@chainlink/contracts": "^0.8.0",
-    "@chainlink/contracts-ccip": "^1.2.1",
+    "@chainlink/contracts": "1.5.0",
+    "@chainlink/contracts-ccip": "1.6.2",
+    "@chainlink/local": "^0.2.7-beta",
     "@inquirer/prompts": "^5.0.2"
   }
 }

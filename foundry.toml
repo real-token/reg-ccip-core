@@ -26,8 +26,13 @@ optimizer_enabled=true
 runs = 10000
 
 remappings = [
+	'@openzeppelin/contracts@4.8.3/=node_modules/@openzeppelin/contracts-4.8.3/',
+	'@openzeppelin/contracts@5.0.2/=node_modules/@openzeppelin/contracts-5.0.2/',
   '@openzeppelin/contracts=node_modules/@openzeppelin/contracts',
-	'@openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable'
+	'@openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable',
+	'@chainlink/contracts=node_modules/@chainlink/contracts',
+	'@chainlink/contracts-ccip=node_modules/@chainlink/contracts-ccip',
+	'@chainlink/local=node_modules/@chainlink/local'
 	# '@openzeppelin/foundry-upgrades=node_modules/@openzeppelin/foundry-upgrades'
 ]
 

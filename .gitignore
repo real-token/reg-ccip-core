@@ -19,3 +19,8 @@ types
 
 # echidna json exports
 /crytic-export
+
+# Foundry
+/out
+/cache_forge
+/lib
