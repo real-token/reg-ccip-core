@@ -3,89 +3,505 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
+import {REG} from "../contracts/reg/REG.sol";
+import {CCIPErrors} from "../contracts/libraries/CCIPErrors.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {StringsUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
+import {CCIPLocalSimulator, WETH9, LinkToken, IRouterClient, BurnMintERC677Helper} from "lib/chainlink-local/src/ccip/CCIPLocalSimulator.sol";
 import {CCIPSenderReceiverMessaging} from "../contracts/ccip/CCIPSenderReceiverMessaging.sol";
-import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {ICCIPSenderReceiverMessaging} from "../contracts/interfaces/ICCIPSenderReceiverMessaging.sol";
 
 contract CCIPSenderReceiverMessagingTest is Test {
-    CCIPSenderReceiverMessaging private ccipMessagingImpl;
-    CCIPSenderReceiverMessaging private ccipMessaging;
-    ERC1967Proxy private ccipMessagingProxy;
+    CCIPLocalSimulator public ccipLocalSimulator;
+    IRouterClient public destinationRouter;
+    IRouterClient public sourceRouter;
+    WETH9 public wrappedNative;
+    LinkToken public linkToken;
+    BurnMintERC677Helper public ccipBnM;
+    BurnMintERC677Helper public ccipLnM;
+    uint64 destinationChainSelector;
+    uint64 sourceChainSelector;
+
+    CCIPSenderReceiverMessaging private ccipImpl;
+    CCIPSenderReceiverMessaging private ccip;
+    ERC1967Proxy private ccipProxy;
+
+    REG private regImpl;
+    REG private reg;
+    ERC1967Proxy private regProxy;
 
     address defaultAdmin = address(11);
     address pauser = address(12);
     address unpauser = address(13);
     address upgrader = address(14);
-    address router = address(15);
-    address linkToken = address(16);
-    address wrappedNativeToken = address(17);
+    address minter = address(15);
 
     address alice = address(101);
     address bob = address(102);
 
     function setUp() public {
-        ccipMessagingImpl = new CCIPSenderReceiverMessaging();
-        ccipMessagingProxy = new ERC1967Proxy(
-            address(ccipMessagingImpl),
+        ccipLocalSimulator = new CCIPLocalSimulator();
+
+        (
+            uint64 chainSelector_,
+            IRouterClient sourceRouter_,
+            IRouterClient destinationRouter_,
+            WETH9 wrappedNative_,
+            LinkToken linkToken_,
+            BurnMintERC677Helper ccipBnM_,
+            BurnMintERC677Helper ccipLnM_
+        ) = ccipLocalSimulator.configuration();
+
+        destinationChainSelector = chainSelector_;
+        sourceRouter = sourceRouter_;
+        destinationRouter = destinationRouter_;
+        linkToken = linkToken_;
+        wrappedNative = wrappedNative_;
+        ccipBnM = ccipBnM_;
+        ccipLnM = ccipLnM_;
+
+        // Deploy CCIPSenderReceiverMessaging
+        ccipImpl = new CCIPSenderReceiverMessaging();
+        ccipProxy = new ERC1967Proxy(
+            address(ccipImpl),
             abi.encodeWithSelector(
                 CCIPSenderReceiverMessaging.initialize.selector,
                 defaultAdmin,
                 pauser,
                 unpauser,
                 upgrader,
-                router,
+                sourceRouter,
                 linkToken,
-                wrappedNativeToken
+                wrappedNative
             )
         );
-        ccipMessaging = CCIPSenderReceiverMessaging(
-            address(ccipMessagingProxy)
+        ccip = CCIPSenderReceiverMessaging(address(ccipProxy));
+
+        // Deploy REG
+        regImpl = new REG();
+        regProxy = new ERC1967Proxy(
+            address(regImpl),
+            abi.encodeWithSelector(
+                REG.initialize.selector,
+                defaultAdmin,
+                pauser,
+                minter,
+                upgrader
+            )
         );
+        reg = REG(address(regProxy));
+
+        // Grant minter/burner role to CCIPSenderReceiver and support REG token in the CCIPLocalSimulator
+        vm.startPrank(defaultAdmin);
+        reg.grantRole(reg.MINTER_BRIDGE_ROLE(), address(ccip));
+        ccipLocalSimulator.supportNewTokenViaAccessControlDefaultAdmin(
+            address(reg)
+        );
+        vm.stopPrank();
+
+        // Mint tokens to Alice and Bob
+        vm.startPrank(minter);
+        reg.mintByGovernance(alice, 1000 ether);
+        reg.mintByGovernance(bob, 1000 ether);
+        ccipLocalSimulator.requestLinkFromFaucet(alice, 10 ether);
+        ccipLocalSimulator.requestLinkFromFaucet(bob, 10 ether);
+        ccipBnM.drip(alice);
+        ccipBnM.drip(bob);
+        vm.stopPrank();
 
         // Label addresses for more readable traces
         vm.label(defaultAdmin, "DefaultAdmin");
         vm.label(pauser, "Pauser");
         vm.label(unpauser, "Unpauser");
-        vm.label(router, "Router");
-        vm.label(linkToken, "LinkToken");
-        vm.label(wrappedNativeToken, "WrappedNativeToken");
         vm.label(upgrader, "Upgrader");
+        vm.label(address(sourceRouter), "SourceRouter");
+        vm.label(address(destinationRouter), "DestinationRouter");
+        vm.label(address(linkToken), "LinkToken");
+        vm.label(address(wrappedNative), "WrappedNativeToken");
         vm.label(alice, "Alice");
         vm.label(bob, "Bob");
     }
 
     function test_initializationAndRoles() public view {
         // Check roles
-        assertTrue(
-            ccipMessaging.hasRole(
-                ccipMessaging.DEFAULT_ADMIN_ROLE(),
-                defaultAdmin
-            )
-        );
-        assertTrue(ccipMessaging.hasRole(ccipMessaging.PAUSER_ROLE(), pauser));
-        assertTrue(
-            ccipMessaging.hasRole(ccipMessaging.UNPAUSER_ROLE(), unpauser)
-        );
-        assertTrue(
-            ccipMessaging.hasRole(ccipMessaging.UPGRADER_ROLE(), upgrader)
-        );
+        assertTrue(ccip.hasRole(ccip.DEFAULT_ADMIN_ROLE(), defaultAdmin));
+        assertTrue(ccip.hasRole(ccip.PAUSER_ROLE(), pauser));
+        assertTrue(ccip.hasRole(ccip.UNPAUSER_ROLE(), unpauser));
+        assertTrue(ccip.hasRole(ccip.UPGRADER_ROLE(), upgrader));
     }
 
     function test_pauseAndUnpause() public {
         vm.startPrank(pauser);
         vm.expectEmit(true, true, true, true);
         emit PausableUpgradeable.Paused(pauser);
-        ccipMessaging.pause();
-        assertTrue(ccipMessaging.paused());
+        ccip.pause();
+        assertTrue(ccip.paused());
         vm.stopPrank();
 
         vm.startPrank(unpauser);
         vm.expectEmit(true, true, true, true);
         emit PausableUpgradeable.Unpaused(unpauser);
-        ccipMessaging.unpause();
-        assertFalse(ccipMessaging.paused());
+        ccip.unpause();
+        assertFalse(ccip.paused());
         vm.stopPrank();
+    }
+
+    function test_allowlistDestinationChain() public {
+        vm.startPrank(defaultAdmin);
+
+        vm.expectEmit(true, true, true, true);
+        emit ICCIPSenderReceiverMessaging.AllowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+
+        vm.stopPrank();
+    }
+
+    function test_allowlistToken() public {
+        vm.startPrank(defaultAdmin);
+
+        vm.expectEmit(true, true, true, true);
+        emit ICCIPSenderReceiverMessaging.AllowlistToken(address(reg), true);
+        ccip.allowlistToken(address(reg), true);
+
+        vm.expectEmit(true, true, true, true);
+        emit ICCIPSenderReceiverMessaging.AllowlistToken(address(reg), false);
+        ccip.allowlistToken(address(reg), false);
+
+        vm.stopPrank();
+    }
+
+    function test_setRouter() public {
+        vm.startPrank(defaultAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit ICCIPSenderReceiverMessaging.SetRouter(sourceRouter);
+        ccip.setRouter(sourceRouter);
+        assertEq(address(ccip.getRouter()), address(sourceRouter));
+        vm.stopPrank();
+    }
+
+    function test_withdraw() public {
+        vm.startPrank(defaultAdmin);
+
+        vm.stopPrank();
+    }
+
+    function test_withdrawToken() public {
+        vm.startPrank(defaultAdmin);
+
+        vm.stopPrank();
+    }
+
+    function test_transferTokens() public {
+        vm.startPrank(defaultAdmin);
+        ccip.setRouter(sourceRouter);
+        ccip.allowlistToken(address(reg), true);
+        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+        vm.stopPrank();
+    }
+
+    function test_transferTokensWithPermit() public {
+        vm.startPrank(defaultAdmin);
+        ccip.setRouter(sourceRouter);
+        ccip.allowlistToken(address(reg), true);
+        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
+        vm.stopPrank();
+    }
+
+    function test_getRouter() public {
+        assertEq(address(ccip.getRouter()), address(sourceRouter));
+        vm.startPrank(defaultAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit ICCIPSenderReceiverMessaging.SetRouter(sourceRouter);
+        ccip.setRouter(sourceRouter);
+        assertEq(address(ccip.getRouter()), address(sourceRouter));
+        vm.stopPrank();
+    }
+
+    function test_getLinkToken() public {
+        assertEq(ccip.getLinkToken(), address(linkToken));
+    }
+
+    function test_getWrappedNativeToken() public {
+        assertEq(ccip.getWrappedNativeToken(), address(wrappedNative));
+    }
+
+    function test_getAllowlistedDestinationChains() public {}
+
+    function test_getAllowlistedTokens() public {}
+
+    function test_isAllowlistedDestinationChain() public {
+        assertEq(
+            ccip.isAllowlistedDestinationChain(destinationChainSelector),
+            false
+        );
+
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+        vm.stopPrank();
+
+        assertEq(
+            ccip.isAllowlistedDestinationChain(destinationChainSelector),
+            true
+        );
+    }
+
+    function test_isAllowlistedToken() public {
+        assertEq(ccip.isAllowlistedToken(address(reg)), false);
+
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistToken(address(reg), true);
+        vm.stopPrank();
+
+        assertEq(ccip.isAllowlistedToken(address(reg)), true);
+    }
+
+    function test_getCcipFeesEstimation() public {}
+
+    function test_ccipReceive() public {}
+
+    function test_supportsInterface() public {}
+
+    function test_upgradeToV2() public {}
+
+    function testRevert_CannotInitializeAgain(address account) public {
+        vm.startPrank(account);
+
+        vm.expectRevert("Initializable: contract is already initialized");
+        ccip.initialize(
+            defaultAdmin,
+            pauser,
+            unpauser,
+            upgrader,
+            sourceRouter,
+            address(linkToken),
+            address(wrappedNative)
+        );
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotPauseIfNotPauser(address account) public {
+        vm.assume(account != pauser);
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.PAUSER_ROLE()));
+        ccip.pause();
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotUnpauseIfNotPauser(address account) public {
+        vm.assume(account != unpauser);
+
+        vm.startPrank(pauser);
+        ccip.pause();
+        vm.stopPrank();
+
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.UNPAUSER_ROLE()));
+        ccip.unpause();
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotAllowlistDestinationChainIfNotDefaultAdmin(
+        address account
+    ) public {
+        vm.assume(account != defaultAdmin);
+
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotAllowlistTokenIfNotDefaultAdmin(
+        address account
+    ) public {
+        vm.assume(account != defaultAdmin);
+
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.allowlistToken(address(reg), true);
+
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.allowlistToken(address(reg), false);
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotSetRouterIfNotDefaultAdmin(
+        address account
+    ) public {
+        vm.assume(account != defaultAdmin);
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.setRouter(sourceRouter);
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotWithdrawIfNotDefaultAdmin(
+        address account
+    ) public {
+        vm.assume(account != defaultAdmin);
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.withdraw(account);
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotWithdrawTokenIfNotDefaultAdmin(
+        address account
+    ) public {
+        vm.assume(account != defaultAdmin);
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
+        ccip.withdrawToken(account, IERC20(address(reg)));
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotTransferTokensWhenPaused() public {
+        _setUpCcip();
+
+        vm.startPrank(pauser);
+        ccip.pause();
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert("Pausable: paused");
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotTransferTokensIfTokenNotAllowlisted() public {}
+
+    function testRevert_CannotTransferTokensIfDestinationChainNotAllowlisted()
+        public
+    {}
+
+    function testRevert_CannotTransferTokensIfSourceChainNotAllowlisted()
+        public
+    {}
+
+    function testRevert_CannotTransferTokensWithPermitWhenPaused() public {
+        _setUpCcip();
+
+        vm.startPrank(pauser);
+        ccip.pause();
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert("Pausable: paused");
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotTransferTokensWithPermitIfTokenNotAllowlisted()
+        public
+    {}
+
+    function testRevert_CannotTransferTokensWithPermitIfDestinationChainNotAllowlisted()
+        public
+    {}
+
+    function testRevert_CannotTransferTokensWithPermitIfSourceChainNotAllowlisted()
+        public
+    {}
+
+    function testRevert_CannotCallCcipReceiveIfNotRouter(
+        address account,
+        Client.Any2EVMMessage calldata message
+    ) public {
+        vm.assume(account != address(destinationRouter));
+
+        vm.startPrank(account);
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.InvalidRouter.selector, account)
+        );
+        ccip.ccipReceive(message);
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotUpgradeIfNotUpgrader(
+        address account,
+        address newImplementation
+    ) public {
+        vm.assume(account != upgrader);
+
+        vm.startPrank(account);
+        vm.expectRevert(_getRevertMessage(account, ccip.UPGRADER_ROLE()));
+        ccip.upgradeTo(newImplementation);
+        vm.stopPrank();
+    }
+
+    function _setUpCcip() private {
+        vm.startPrank(defaultAdmin);
+        ccip.setRouter(sourceRouter);
+        ccip.allowlistToken(address(reg), true);
+        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
+        vm.stopPrank();
+    }
+
+    function _getRevertMessage(
+        address account,
+        bytes32 role
+    ) private pure returns (bytes memory) {
+        return
+            abi.encodePacked(
+                "AccessControl: account ",
+                StringsUpgradeable.toHexString(account),
+                " is missing role ",
+                StringsUpgradeable.toHexString(uint256(role), 32)
+            );
     }
 }
