@@ -140,6 +140,14 @@ address private constant \_wrappedNativeToken =
 npx hardhat coverage
 ```
 
+or
+
+```
+forge coverage --report lcov
+
+genhtml lcov.info -o coverage-html
+```
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- GAS FEES -->

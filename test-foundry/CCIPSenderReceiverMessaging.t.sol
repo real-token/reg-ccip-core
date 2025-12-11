@@ -14,6 +14,7 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {CCIPLocalSimulator, WETH9, LinkToken, IRouterClient, BurnMintERC677Helper} from "lib/chainlink-local/src/ccip/CCIPLocalSimulator.sol";
 import {CCIPSenderReceiverMessaging} from "../contracts/ccip/CCIPSenderReceiverMessaging.sol";
 import {ICCIPSenderReceiverMessaging} from "../contracts/interfaces/ICCIPSenderReceiverMessaging.sol";
+import {CCIPSenderReceiverMessagingV2} from "./mock/CCIPSenderReceiverMessagingV2.sol";
 
 contract CCIPSenderReceiverMessagingTest is Test {
     CCIPLocalSimulator public ccipLocalSimulator;
@@ -189,16 +190,34 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
-    function test_withdraw() public {
+    function test_withdraw(uint256 amount) public {
+        vm.assume(amount != 0);
+        vm.deal(address(ccip), amount);
+        assertEq(address(ccip).balance, amount);
+
         vm.startPrank(defaultAdmin);
+        ccip.withdraw(defaultAdmin);
 
         vm.stopPrank();
+
+        assertEq(address(ccip).balance, 0);
+        assertEq(defaultAdmin.balance, amount);
     }
 
-    function test_withdrawToken() public {
-        vm.startPrank(defaultAdmin);
+    function test_withdrawToken(uint256 amount) public {
+        vm.assume(amount != 0);
+        vm.assume(amount < type(uint256).max - 2000 ether);
 
+        vm.prank(minter);
+        reg.mintByGovernance(address(ccip), amount);
+        assertEq(reg.balanceOf(address(ccip)), amount);
+
+        vm.startPrank(defaultAdmin);
+        ccip.withdrawToken(defaultAdmin, IERC20(address(reg)));
         vm.stopPrank();
+
+        assertEq(reg.balanceOf(address(ccip)), 0);
+        assertEq(reg.balanceOf(defaultAdmin), amount);
     }
 
     function test_transferTokens() public {
@@ -248,9 +267,27 @@ contract CCIPSenderReceiverMessagingTest is Test {
         assertEq(ccip.getWrappedNativeToken(), address(wrappedNative));
     }
 
-    function test_getAllowlistedDestinationChains() public {}
+    function test_getAllowlistedDestinationChains() public {
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+        vm.stopPrank();
 
-    function test_getAllowlistedTokens() public {}
+        assertEq(
+            ccip.getAllowlistedDestinationChains()[0],
+            destinationChainSelector
+        );
+    }
+
+    function test_getAllowlistedTokens() public {
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistToken(address(reg), true);
+        vm.stopPrank();
+
+        assertEq(ccip.getAllowlistedTokens()[0], address(reg));
+    }
 
     function test_isAllowlistedDestinationChain() public {
         assertEq(
@@ -281,13 +318,51 @@ contract CCIPSenderReceiverMessagingTest is Test {
         assertEq(ccip.isAllowlistedToken(address(reg)), true);
     }
 
-    function test_getCcipFeesEstimation() public {}
+    function test_getCcipFeesEstimation(
+        uint64 destinationChainSelector,
+        address receiver,
+        address token,
+        uint256 amount,
+        address feeToken,
+        uint256 gasLimit
+    ) public {
+        destinationChainSelector = destinationChainSelector;
+        token = address(reg);
+        feeToken = address(linkToken);
+        gasLimit = 100000;
+
+        uint256 fees = ccip.getCcipFeesEstimation(
+            destinationChainSelector,
+            receiver,
+            token,
+            amount,
+            feeToken,
+            gasLimit
+        );
+        console.log("Fees is: ", fees);
+    }
 
     function test_ccipReceive() public {}
 
-    function test_supportsInterface() public {}
+    function test_supportsInterface() public {
+        assertTrue(ccip.supportsInterface(0x01ffc9a7)); // type(IERC165).interfaceId = type(IERC165Upgradeable).interfaceId
+        assertTrue(ccip.supportsInterface(0x85572ffb)); // type(IAny2EVMMessageReceiver).interfaceId
+        assertTrue(ccip.supportsInterface(0x7965db0b)); // type(IAccessControlUpgradeable).interfaceId
+    }
 
-    function test_upgradeToV2() public {}
+    function test_upgradeToV2() public {
+        CCIPSenderReceiverMessagingV2 newImpl = new CCIPSenderReceiverMessagingV2();
+
+        vm.startPrank(upgrader);
+        ccip.upgradeTo(address(newImpl));
+
+        CCIPSenderReceiverMessagingV2 ccipV2 = CCIPSenderReceiverMessagingV2(
+            address(ccip)
+        );
+
+        string memory resp = ccipV2.newFunction();
+        assertEq(resp, "CCIPSenderReceiverMessaging V2 is active");
+    }
 
     function testRevert_CannotInitializeAgain(address account) public {
         vm.startPrank(account);
@@ -342,6 +417,25 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
+    function testRevert_CannotAllowlistDestinationChainTwice() public {
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+
+        // Second tx reverts because the allowlisted state of the destination chain does not change
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.AllowedStateNotChange.selector)
+        );
+        ccip.allowlistDestinationChain(
+            destinationChainSelector,
+            address(destinationRouter)
+        );
+
+        vm.stopPrank();
+    }
+
     function testRevert_CannotAllowlistTokenIfNotDefaultAdmin(
         address account
     ) public {
@@ -357,6 +451,29 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
+    function testRevert_CannotAllowlistTokenForNonContractAddress() public {
+        vm.startPrank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.InvalidContractAddress.selector)
+        );
+        ccip.allowlistToken(address(0), true);
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotAllowlistTokenTwice() public {
+        vm.startPrank(defaultAdmin);
+        ccip.allowlistToken(address(reg), true);
+
+        // Second tx reverts because the allowlisted state of the token does not change
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.AllowedStateNotChange.selector)
+        );
+        ccip.allowlistToken(address(reg), true);
+
+        vm.stopPrank();
+    }
+
     function testRevert_CannotSetRouterIfNotDefaultAdmin(
         address account
     ) public {
@@ -364,6 +481,16 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.startPrank(account);
         vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
         ccip.setRouter(sourceRouter);
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotSetRouterToNonContractAddress() public {
+        vm.startPrank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.InvalidContractAddress.selector)
+        );
+        ccip.setRouter(IRouterClient(address(0)));
 
         vm.stopPrank();
     }
@@ -379,6 +506,16 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
+    function testRevert_CannotWithdrawIfNothing() public {
+        vm.startPrank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.NothingToWithdraw.selector)
+        );
+        ccip.withdraw(defaultAdmin);
+
+        vm.stopPrank();
+    }
+
     function testRevert_CannotWithdrawTokenIfNotDefaultAdmin(
         address account
     ) public {
@@ -386,6 +523,16 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.startPrank(account);
         vm.expectRevert(_getRevertMessage(account, ccip.DEFAULT_ADMIN_ROLE()));
         ccip.withdrawToken(account, IERC20(address(reg)));
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotWithdrawTokenIfNothing() public {
+        vm.startPrank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(CCIPErrors.NothingToWithdraw.selector)
+        );
+        ccip.withdrawToken(defaultAdmin, IERC20(address(reg)));
 
         vm.stopPrank();
     }
@@ -413,11 +560,84 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
-    function testRevert_CannotTransferTokensIfTokenNotAllowlisted() public {}
+    function testRevert_CannotTransferTokensIfTokenNotAllowlisted() public {
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CCIPErrors.TokenNotAllowlisted.selector,
+                address(reg)
+            )
+        );
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
 
     function testRevert_CannotTransferTokensIfDestinationChainNotAllowlisted()
         public
-    {}
+    {
+        vm.prank(defaultAdmin);
+        ccip.allowlistToken(address(reg), true);
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CCIPErrors.DestinationChainNotAllowlisted.selector,
+                destinationChainSelector
+            )
+        );
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
+
+    function testRevert_CannotTransferTokensIfFeeTokenInvalid(
+        address invalidFeeToken
+    ) public {
+        vm.assume(invalidFeeToken != address(0));
+        vm.assume(invalidFeeToken != address(linkToken));
+        vm.assume(invalidFeeToken != address(wrappedNative));
+
+        _setUpCcip();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CCIPErrors.InvalidFeeToken.selector,
+                invalidFeeToken
+            )
+        );
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            invalidFeeToken,
+            1000000
+        );
+
+        vm.stopPrank();
+    }
 
     function testRevert_CannotTransferTokensIfSourceChainNotAllowlisted()
         public
@@ -448,11 +668,54 @@ contract CCIPSenderReceiverMessagingTest is Test {
 
     function testRevert_CannotTransferTokensWithPermitIfTokenNotAllowlisted()
         public
-    {}
+    {
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CCIPErrors.TokenNotAllowlisted.selector,
+                address(reg)
+            )
+        );
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
 
     function testRevert_CannotTransferTokensWithPermitIfDestinationChainNotAllowlisted()
         public
-    {}
+    {
+        vm.prank(defaultAdmin);
+        ccip.allowlistToken(address(reg), true);
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CCIPErrors.DestinationChainNotAllowlisted.selector,
+                destinationChainSelector
+            )
+        );
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000
+        );
+
+        vm.stopPrank();
+    }
 
     function testRevert_CannotTransferTokensWithPermitIfSourceChainNotAllowlisted()
         public
