@@ -41,8 +41,14 @@ contract CCIPSenderReceiverMessagingTest is Test {
     address upgrader = address(14);
     address minter = address(15);
 
-    address alice = address(101);
+    uint256 alicePrivateKey = 0xBEEF;
+    address alice = vm.addr(alicePrivateKey);
     address bob = address(102);
+
+    bytes32 constant PERMIT_TYPEHASH =
+        keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+        );
 
     function setUp() public {
         ccipLocalSimulator = new CCIPLocalSimulator();
@@ -220,16 +226,14 @@ contract CCIPSenderReceiverMessagingTest is Test {
         assertEq(reg.balanceOf(defaultAdmin), amount);
     }
 
-    function test_transferTokens() public {
-        vm.startPrank(defaultAdmin);
-        ccip.setRouter(sourceRouter);
-        ccip.allowlistToken(address(reg), true);
-        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
-        vm.stopPrank();
+    function test_transferTokensUsingLink() public {
+        _setUpCcip();
 
         vm.startPrank(alice);
         reg.approve(address(ccip), 1e18);
 
+        // vm.expectEmit(true, true, true, true);
+        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
         ccip.transferTokens(
             destinationChainSelector,
             bob,
@@ -241,11 +245,134 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
-    function test_transferTokensWithPermit() public {
-        vm.startPrank(defaultAdmin);
-        ccip.setRouter(sourceRouter);
-        ccip.allowlistToken(address(reg), true);
-        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
+    function test_transferTokensUsingNative() public {
+        _setUpCcip();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        // vm.expectEmit(true, true, true, true);
+        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(0),
+            1000000
+        );
+        vm.stopPrank();
+    }
+
+    function test_transferTokensUsingWrappedNative() public {
+        _setUpCcip();
+
+        vm.startPrank(alice);
+        reg.approve(address(ccip), 1e18);
+
+        // vm.expectEmit(true, true, true, true);
+        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
+        ccip.transferTokens(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(wrappedNative),
+            1000000
+        );
+        vm.stopPrank();
+    }
+
+    function test_transferTokensWithPermitUsingLink() public {
+        _setUpCcip();
+
+        // // ===== Build permit digest for EIP-2612 =====
+        uint256 deadline = block.timestamp + 1 days;
+        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignature(
+            alice,
+            alicePrivateKey,
+            address(ccip),
+            1e18, // amount
+            deadline
+        );
+
+        vm.startPrank(alice);
+
+        ccip.transferTokensWithPermit(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(linkToken),
+            1000000,
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        vm.stopPrank();
+    }
+
+    function test_transferTokensWithPermitUsingNative() public {
+        _setUpCcip();
+
+        // // ===== Build permit digest for EIP-2612 =====
+        uint256 deadline = block.timestamp + 1 days;
+        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignature(
+            alice,
+            alicePrivateKey,
+            address(ccip),
+            1e18, // amount
+            deadline
+        );
+
+        vm.startPrank(alice);
+
+        ccip.transferTokensWithPermit(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(0),
+            1000000,
+            deadline,
+            v,
+            r,
+            s
+        ){value: msg.sender};
+
+        vm.stopPrank();
+    }
+
+    function test_transferTokensWithPermitUsingWrappedNative() public {
+        _setUpCcip();
+
+        // // ===== Build permit digest for EIP-2612 =====
+        uint256 deadline = block.timestamp + 1 days;
+        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignature(
+            alice,
+            alicePrivateKey,
+            address(ccip),
+            1e18, // amount
+            deadline
+        );
+
+        vm.startPrank(alice);
+
+        ccip.transferTokensWithPermit(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            1e18,
+            address(wrappedNative),
+            1000000,
+            deadline,
+            v,
+            r,
+            s
+        );
+
         vm.stopPrank();
     }
 
@@ -753,6 +880,35 @@ contract CCIPSenderReceiverMessagingTest is Test {
         ccip.allowlistToken(address(reg), true);
         ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
         vm.stopPrank();
+    }
+
+    function _getPermitSignature(
+        address ownerAddress,
+        uint256 ownerPrivateKey,
+        address spender,
+        uint256 amount,
+        uint256 deadline
+    ) private view returns (uint8 v, bytes32 r, bytes32 s) {
+        // ===== Build permit digest for EIP-2612 =====
+        uint256 nonce = reg.nonces(ownerAddress);
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                PERMIT_TYPEHASH,
+                ownerAddress, // Owner
+                spender, // Spender
+                amount, // value
+                nonce,
+                deadline
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", reg.DOMAIN_SEPARATOR(), structHash)
+        );
+
+        // Sign with ownerPrivateKey
+        (v, r, s) = vm.sign(ownerPrivateKey, digest);
     }
 
     function _getRevertMessage(
