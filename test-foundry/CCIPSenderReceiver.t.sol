@@ -293,11 +293,11 @@ contract CCIPSenderReceiverTest is Test {
         vm.stopPrank();
     }
 
-    function test_getLinkToken() public {
+    function test_getLinkToken() public view {
         assertEq(ccip.getLinkToken(), ETHEREUM_LINKTOKEN);
     }
 
-    function test_getWrappedNativeToken() public {
+    function test_getWrappedNativeToken() public view {
         assertEq(ccip.getWrappedNativeToken(), ETHEREUM_WETH);
     }
 
@@ -359,7 +359,7 @@ contract CCIPSenderReceiverTest is Test {
         uint256 amount,
         address feeToken,
         uint256 gasLimit
-    ) public {
+    ) public view {
         destinationChainSelector = destinationChainSelector;
         token = address(reg);
         feeToken = address(linkToken);
@@ -378,7 +378,7 @@ contract CCIPSenderReceiverTest is Test {
 
     function test_ccipReceive() public {}
 
-    function test_supportsInterface() public {
+    function test_supportsInterface() public view {
         assertTrue(ccip.supportsInterface(0x01ffc9a7)); // type(IERC165).interfaceId = type(IERC165Upgradeable).interfaceId
         assertTrue(ccip.supportsInterface(0x85572ffb)); // type(IAny2EVMMessageReceiver).interfaceId
         assertTrue(ccip.supportsInterface(0x7965db0b)); // type(IAccessControlUpgradeable).interfaceId

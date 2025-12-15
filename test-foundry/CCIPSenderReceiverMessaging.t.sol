@@ -45,6 +45,12 @@ contract CCIPSenderReceiverMessagingTest is Test {
     address alice = vm.addr(alicePrivateKey);
     address bob = address(102);
 
+    uint256 public constant REG_BALANCE = 1000 ether;
+    uint256 public constant ETH_BALANCE = 10 ether;
+    uint256 public constant WRAP_BALANCE = 5 ether;
+    uint256 public constant LINK_BALANCE = 10 ether;
+    uint256 public constant CCIP_GAS_LIMIT = 100_000;
+
     bytes32 constant PERMIT_TYPEHASH =
         keccak256(
             "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
@@ -112,13 +118,21 @@ contract CCIPSenderReceiverMessagingTest is Test {
 
         // Mint tokens to Alice and Bob
         vm.startPrank(minter);
-        reg.mintByGovernance(alice, 1000 ether);
-        reg.mintByGovernance(bob, 1000 ether);
-        ccipLocalSimulator.requestLinkFromFaucet(alice, 10 ether);
-        ccipLocalSimulator.requestLinkFromFaucet(bob, 10 ether);
+        vm.deal(alice, ETH_BALANCE);
+        vm.deal(bob, ETH_BALANCE);
+        reg.mintByGovernance(alice, REG_BALANCE);
+        reg.mintByGovernance(bob, REG_BALANCE);
+        ccipLocalSimulator.requestLinkFromFaucet(alice, LINK_BALANCE);
+        ccipLocalSimulator.requestLinkFromFaucet(bob, LINK_BALANCE);
         ccipBnM.drip(alice);
         ccipBnM.drip(bob);
         vm.stopPrank();
+
+        vm.prank(alice);
+        wrappedNative.deposit{value: WRAP_BALANCE}();
+
+        vm.prank(bob);
+        wrappedNative.deposit{value: WRAP_BALANCE}();
 
         // Label addresses for more readable traces
         vm.label(defaultAdmin, "DefaultAdmin");
@@ -226,64 +240,127 @@ contract CCIPSenderReceiverMessagingTest is Test {
         assertEq(reg.balanceOf(defaultAdmin), amount);
     }
 
-    function test_transferTokensUsingLink() public {
+    function test_transferTokensUsingLink(uint256 amount) public {
+        vm.assume(amount < REG_BALANCE);
         _setUpCcip();
 
-        vm.startPrank(alice);
-        reg.approve(address(ccip), 1e18);
-
-        // vm.expectEmit(true, true, true, true);
-        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
-        ccip.transferTokens(
+        uint256 fees = ccip.getCcipFeesEstimation(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
             address(linkToken),
-            1000000
+            CCIP_GAS_LIMIT
         );
-        vm.stopPrank();
-    }
-
-    function test_transferTokensUsingNative() public {
-        _setUpCcip();
 
         vm.startPrank(alice);
-        reg.approve(address(ccip), 1e18);
+        reg.approve(address(ccip), amount);
+        linkToken.approve(address(ccip), 1e18);
 
-        // vm.expectEmit(true, true, true, true);
-        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(linkToken), // feeToken
+            fees // fees
+        );
+
         ccip.transferTokens(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
+            address(linkToken),
+            CCIP_GAS_LIMIT
+        );
+        vm.stopPrank();
+    }
+
+    function test_transferTokensUsingNative(uint256 amount) public {
+        vm.assume(amount < REG_BALANCE);
+        _setUpCcip();
+
+        uint256 fees = ccip.getCcipFeesEstimation(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
+            address(0), // feeToken == native
+            CCIP_GAS_LIMIT
+        );
+
+        vm.startPrank(alice);
+        vm.deal(alice, ETH_BALANCE);
+        reg.approve(address(ccip), amount);
+
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(0), // feeToken
+            fees // fees
+        );
+
+        ccip.transferTokens{value: fees}(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
             address(0),
-            1000000
+            CCIP_GAS_LIMIT
         );
+
         vm.stopPrank();
     }
 
-    function test_transferTokensUsingWrappedNative() public {
+    function test_transferTokensUsingWrappedNative(uint256 amount) public {
+        vm.assume(amount < REG_BALANCE);
         _setUpCcip();
 
-        vm.startPrank(alice);
-        reg.approve(address(ccip), 1e18);
+        uint256 fees = ccip.getCcipFeesEstimation(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
+            address(wrappedNative), // feeToken == wrappedNative
+            CCIP_GAS_LIMIT
+        );
 
-        // vm.expectEmit(true, true, true, true);
-        // emit ICCIPSenderReceiverMessaging.TokensTransferred();
+        vm.startPrank(alice);
+        reg.approve(address(ccip), amount);
+        wrappedNative.approve(address(ccip), fees);
+
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(wrappedNative), // feeToken
+            fees // fees
+        );
+
         ccip.transferTokens(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
             address(wrappedNative),
-            1000000
+            CCIP_GAS_LIMIT
         );
+
         vm.stopPrank();
     }
 
-    function test_transferTokensWithPermitUsingLink() public {
+    function test_transferTokensWithPermitUsingLink(uint256 amount) public {
+        vm.assume(amount < REG_BALANCE);
         _setUpCcip();
 
         // // ===== Build permit digest for EIP-2612 =====
@@ -292,19 +369,41 @@ contract CCIPSenderReceiverMessagingTest is Test {
             alice,
             alicePrivateKey,
             address(ccip),
-            1e18, // amount
+            amount, // amount
             deadline
         );
 
+        uint256 fees = ccip.getCcipFeesEstimation(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
+            address(linkToken), // feeToken
+            CCIP_GAS_LIMIT
+        );
+
         vm.startPrank(alice);
+        reg.approve(address(ccip), amount);
+        linkToken.approve(address(ccip), fees);
+
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(linkToken), // feeToken
+            fees // fees
+        );
 
         ccip.transferTokensWithPermit(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
             address(linkToken),
-            1000000,
+            CCIP_GAS_LIMIT,
             deadline,
             v,
             r,
@@ -314,7 +413,8 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
-    function test_transferTokensWithPermitUsingNative() public {
+    function test_transferTokensWithPermitUsingNative(uint256 amount) public {
+        vm.assume(amount < REG_BALANCE);
         _setUpCcip();
 
         // // ===== Build permit digest for EIP-2612 =====
@@ -323,29 +423,51 @@ contract CCIPSenderReceiverMessagingTest is Test {
             alice,
             alicePrivateKey,
             address(ccip),
-            1e18, // amount
+            amount, // amount
             deadline
         );
 
-        vm.startPrank(alice);
-
-        ccip.transferTokensWithPermit(
+        uint256 fees = ccip.getCcipFeesEstimation(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
+            address(0), // feeToken
+            CCIP_GAS_LIMIT
+        );
+
+        vm.startPrank(alice);
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(0), // feeToken
+            fees // fees
+        );
+
+        ccip.transferTokensWithPermit{value: fees}(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
             address(0),
-            1000000,
+            CCIP_GAS_LIMIT,
             deadline,
             v,
             r,
             s
-        ){value: msg.sender};
+        );
 
         vm.stopPrank();
     }
 
-    function test_transferTokensWithPermitUsingWrappedNative() public {
+    function test_transferTokensWithPermitUsingWrappedNative(
+        uint256 amount
+    ) public {
+        vm.assume(amount < REG_BALANCE);
         _setUpCcip();
 
         // // ===== Build permit digest for EIP-2612 =====
@@ -354,19 +476,40 @@ contract CCIPSenderReceiverMessagingTest is Test {
             alice,
             alicePrivateKey,
             address(ccip),
-            1e18, // amount
+            amount, // amount
             deadline
         );
 
+        uint256 fees = ccip.getCcipFeesEstimation(
+            destinationChainSelector,
+            bob,
+            address(reg),
+            amount,
+            address(wrappedNative), // feeToken
+            CCIP_GAS_LIMIT
+        );
+
         vm.startPrank(alice);
+        wrappedNative.approve(address(ccip), fees);
+
+        vm.expectEmit(false, false, false, true);
+        emit ICCIPSenderReceiverMessaging.TokensTransferred(
+            bytes32(0), // messageId
+            destinationChainSelector,
+            bob, // receiver
+            address(reg), // token
+            amount, // tokenAmount
+            address(wrappedNative), // feeToken
+            fees // fees
+        );
 
         ccip.transferTokensWithPermit(
             destinationChainSelector,
             bob,
             address(reg),
-            1e18,
+            amount,
             address(wrappedNative),
-            1000000,
+            CCIP_GAS_LIMIT,
             deadline,
             v,
             r,
@@ -386,11 +529,11 @@ contract CCIPSenderReceiverMessagingTest is Test {
         vm.stopPrank();
     }
 
-    function test_getLinkToken() public {
+    function test_getLinkToken() public view {
         assertEq(ccip.getLinkToken(), address(linkToken));
     }
 
-    function test_getWrappedNativeToken() public {
+    function test_getWrappedNativeToken() public view {
         assertEq(ccip.getWrappedNativeToken(), address(wrappedNative));
     }
 
@@ -446,20 +589,20 @@ contract CCIPSenderReceiverMessagingTest is Test {
     }
 
     function test_getCcipFeesEstimation(
-        uint64 destinationChainSelector,
+        uint64 allowedDestinationChainSelector,
         address receiver,
         address token,
         uint256 amount,
         address feeToken,
         uint256 gasLimit
-    ) public {
-        destinationChainSelector = destinationChainSelector;
+    ) public view {
+        allowedDestinationChainSelector = destinationChainSelector;
         token = address(reg);
         feeToken = address(linkToken);
-        gasLimit = 100000;
+        gasLimit = CCIP_GAS_LIMIT;
 
         uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
+            allowedDestinationChainSelector,
             receiver,
             token,
             amount,
@@ -471,7 +614,7 @@ contract CCIPSenderReceiverMessagingTest is Test {
 
     function test_ccipReceive() public {}
 
-    function test_supportsInterface() public {
+    function test_supportsInterface() public view {
         assertTrue(ccip.supportsInterface(0x01ffc9a7)); // type(IERC165).interfaceId = type(IERC165Upgradeable).interfaceId
         assertTrue(ccip.supportsInterface(0x85572ffb)); // type(IAny2EVMMessageReceiver).interfaceId
         assertTrue(ccip.supportsInterface(0x7965db0b)); // type(IAccessControlUpgradeable).interfaceId
