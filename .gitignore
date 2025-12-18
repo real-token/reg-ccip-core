@@ -25,4 +25,4 @@ types
 /cache_forge
 /lib
 /coverage-html
-.lcov.info
+lcov.info
