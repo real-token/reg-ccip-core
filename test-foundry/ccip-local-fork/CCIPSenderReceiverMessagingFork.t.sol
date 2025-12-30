@@ -15,10 +15,11 @@ import {StringsUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Stri
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {CCIPLocalSimulatorFork, Register} from "lib/chainlink-local/src/ccip/CCIPLocalSimulatorFork.sol";
+import {MainnetCCIPLocalSimulatorFork, MainnetRegister} from "../mock/MainnetCCIPLocalSimulatorFork.sol";
 import {WETH9, LinkToken, IRouterClient, BurnMintERC677Helper} from "lib/chainlink-local/src/ccip/CCIPLocalSimulator.sol";
 
 contract CCIPSenderReceiverMessagingForkTest is Test {
-    CCIPLocalSimulatorFork public ccipLocalSimulatorFork;
+    MainnetCCIPLocalSimulatorFork public ccipLocalSimulatorFork;
     uint256 sourceFork;
     uint256 destinationFork;
     IRouterClient public sourceRouter;
@@ -26,7 +27,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     uint64 sourceChainSelector;
     uint64 destinationChainSelector;
     WETH9 public wrappedNative;
-    LinkToken public linkToken;
+    IERC20 public sourceLinkToken;
     BurnMintERC677Helper public sourceCCIPBnMToken;
     BurnMintERC677Helper public destinationCCIPBnMToken;
 
@@ -62,13 +63,15 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     function setUp() public {
         string memory SOURCE_RPC_URL = vm.envString("GNOSIS_RPC_URL");
         string memory DESTINATION_RPC_URL = vm.envString("ETHEREUM_RPC_URL");
+        // string memory SOURCE_RPC_URL = vm.envString("SEPOLIA_RPC_URL");
+        // string memory DESTINATION_RPC_URL = vm.envString("CHIADO_RPC_URL");
         sourceFork = vm.createFork(SOURCE_RPC_URL);
         destinationFork = vm.createFork(DESTINATION_RPC_URL);
 
-        ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
+        ccipLocalSimulatorFork = new MainnetCCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
 
-        Register.NetworkDetails
+        MainnetRegister.NetworkDetails
             memory destinationNetworkDetails = ccipLocalSimulatorFork
                 .getNetworkDetails(block.chainid);
 
@@ -78,7 +81,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         destinationChainSelector = destinationNetworkDetails.chainSelector;
 
         vm.selectFork(sourceFork);
-        Register.NetworkDetails
+        MainnetRegister.NetworkDetails
             memory sourceNetworkDetails = ccipLocalSimulatorFork
                 .getNetworkDetails(block.chainid);
         sourceCCIPBnMToken = BurnMintERC677Helper(
@@ -86,6 +89,9 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         );
         sourceLinkToken = IERC20(sourceNetworkDetails.linkAddress);
         sourceRouter = IRouterClient(sourceNetworkDetails.routerAddress);
+        wrappedNative = WETH9(
+            payable(sourceNetworkDetails.wrappedNativeAddress)
+        );
 
         // Deploy CCIPSenderReceiverMessaging
         ccipImpl = new CCIPSenderReceiverMessaging();
@@ -98,7 +104,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
                 unpauser,
                 upgrader,
                 sourceRouter,
-                linkToken,
+                sourceLinkToken,
                 wrappedNative
             )
         );
@@ -121,9 +127,9 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         // Grant minter/burner role to CCIPSenderReceiver and support REG token in the CCIPLocalSimulator
         vm.startPrank(defaultAdmin);
         reg.grantRole(reg.MINTER_BRIDGE_ROLE(), address(ccip));
-        ccipLocalSimulator.supportNewTokenViaAccessControlDefaultAdmin(
-            address(reg)
-        );
+        // ccipLocalSimulatorFork.supportNewTokenViaAccessControlDefaultAdmin(
+        //     address(reg)
+        // );
         vm.stopPrank();
 
         // Mint tokens to Alice and Bob
@@ -132,10 +138,10 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         vm.deal(bob, ETH_BALANCE);
         reg.mintByGovernance(alice, REG_BALANCE);
         reg.mintByGovernance(bob, REG_BALANCE);
-        ccipLocalSimulator.requestLinkFromFaucet(alice, LINK_BALANCE);
-        ccipLocalSimulator.requestLinkFromFaucet(bob, LINK_BALANCE);
-        ccipBnM.drip(alice);
-        ccipBnM.drip(bob);
+        ccipLocalSimulatorFork.requestLinkFromFaucet(alice, LINK_BALANCE); // requestLinkFromFaucet does not exist on mainnet
+        ccipLocalSimulatorFork.requestLinkFromFaucet(bob, LINK_BALANCE); // requestLinkFromFaucet does not exist on mainnet
+        // ccipBnM.drip(alice);
+        // ccipBnM.drip(bob);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -151,7 +157,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         vm.label(upgrader, "Upgrader");
         vm.label(address(sourceRouter), "SourceRouter");
         vm.label(address(destinationRouter), "DestinationRouter");
-        vm.label(address(linkToken), "LinkToken");
+        vm.label(address(sourceLinkToken), "SourceLinkToken");
         vm.label(address(wrappedNative), "WrappedNativeToken");
         vm.label(alice, "Alice");
         vm.label(bob, "Bob");
@@ -261,13 +267,13 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             amount,
-            address(linkToken),
+            address(sourceLinkToken),
             CCIP_GAS_LIMIT
         );
 
         vm.startPrank(alice);
         reg.approve(address(ccip), amount);
-        linkToken.approve(address(ccip), 1e18);
+        sourceLinkToken.approve(address(ccip), 1e18);
 
         vm.expectEmit(false, false, false, true);
         emit ICCIPSenderReceiverMessaging.TokensTransferred(
@@ -276,7 +282,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob, // receiver
             address(reg), // token
             amount, // tokenAmount
-            address(linkToken), // feeToken
+            address(sourceLinkToken), // feeToken
             fees // fees
         );
 
@@ -285,7 +291,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             amount,
-            address(linkToken),
+            address(sourceLinkToken),
             CCIP_GAS_LIMIT
         );
         vm.stopPrank();
@@ -390,13 +396,13 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             amount,
-            address(linkToken), // feeToken
+            address(sourceLinkToken), // feeToken
             CCIP_GAS_LIMIT
         );
 
         vm.startPrank(alice);
         reg.approve(address(ccip), amount);
-        linkToken.approve(address(ccip), fees);
+        sourceLinkToken.approve(address(ccip), fees);
 
         vm.expectEmit(false, false, false, true);
         emit ICCIPSenderReceiverMessaging.TokensTransferred(
@@ -405,7 +411,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob, // receiver
             address(reg), // token
             amount, // tokenAmount
-            address(linkToken), // feeToken
+            address(sourceLinkToken), // feeToken
             fees // fees
         );
 
@@ -414,7 +420,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             amount,
-            address(linkToken),
+            address(sourceLinkToken),
             CCIP_GAS_LIMIT,
             deadline,
             v,
@@ -542,7 +548,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     }
 
     function test_getLinkToken() public view {
-        assertEq(ccip.getLinkToken(), address(linkToken));
+        assertEq(ccip.getLinkToken(), address(sourceLinkToken));
     }
 
     function test_getWrappedNativeToken() public view {
@@ -610,7 +616,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     ) public view {
         allowedDestinationChainSelector = destinationChainSelector;
         token = address(reg);
-        feeToken = address(linkToken);
+        feeToken = address(sourceLinkToken);
         gasLimit = CCIP_GAS_LIMIT;
 
         uint256 fees = ccip.getCcipFeesEstimation(
@@ -656,7 +662,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             unpauser,
             upgrader,
             sourceRouter,
-            address(linkToken),
+            address(sourceLinkToken),
             address(wrappedNative)
         );
 
@@ -835,7 +841,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
@@ -857,7 +863,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
@@ -884,7 +890,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
@@ -895,7 +901,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         address invalidFeeToken
     ) public {
         vm.assume(invalidFeeToken != address(0));
-        vm.assume(invalidFeeToken != address(linkToken));
+        vm.assume(invalidFeeToken != address(sourceLinkToken));
         vm.assume(invalidFeeToken != address(wrappedNative));
 
         _setUpCcip();
@@ -941,7 +947,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
@@ -965,7 +971,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
@@ -992,7 +998,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(linkToken),
+            address(sourceLinkToken),
             1000000
         );
 
