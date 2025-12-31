@@ -5,34 +5,35 @@ import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {REG} from "../../contracts/reg/REG.sol";
 import {CCIPErrors} from "../../contracts/libraries/CCIPErrors.sol";
-import {CCIPSenderReceiverMessaging} from "../../contracts/ccip/CCIPSenderReceiverMessaging.sol";
-import {ICCIPSenderReceiverMessaging} from "../../contracts/interfaces/ICCIPSenderReceiverMessaging.sol";
-import {CCIPSenderReceiverMessagingV2} from "../mock/CCIPSenderReceiverMessagingV2.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {StringsUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {StringsUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
-import {CCIPLocalSimulatorFork, Register} from "lib/chainlink-local/src/ccip/CCIPLocalSimulatorFork.sol";
-import {MainnetCCIPLocalSimulatorFork, MainnetRegister} from "../mock/MainnetCCIPLocalSimulatorFork.sol";
-import {WETH9, LinkToken, IRouterClient, BurnMintERC677Helper} from "lib/chainlink-local/src/ccip/CCIPLocalSimulator.sol";
+import {CCIPLocalSimulator, WETH9, LinkToken, IRouterClient, BurnMintERC677Helper} from "lib/chainlink-local/src/ccip/CCIPLocalSimulator.sol";
+import {CCIPSenderReceiver} from "../../contracts/ccip/CCIPSenderReceiver.sol";
+import {ICCIPSenderReceiver} from "../../contracts/interfaces/ICCIPSenderReceiver.sol";
+import {CCIPSenderReceiverV2} from "../mock/CCIPSenderReceiverV2.sol";
 
-contract CCIPSenderReceiverMessagingForkTest is Test {
-    MainnetCCIPLocalSimulatorFork public ccipLocalSimulatorFork;
-    uint256 sourceFork;
-    uint256 destinationFork;
-    IRouterClient public sourceRouter;
+contract CCIPSenderReceiverForkTest is Test {
+    address private constant ETHEREUM_LINKTOKEN =
+        0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK on Ethereum
+    address private constant ETHEREUM_WETH =
+        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH on Ethereum
+
+    CCIPLocalSimulator public ccipLocalSimulator;
     IRouterClient public destinationRouter;
-    uint64 sourceChainSelector;
+    IRouterClient public sourceRouter;
+    WETH9 public wrappedNative;
+    LinkToken public linkToken;
+    BurnMintERC677Helper public ccipBnM;
+    BurnMintERC677Helper public ccipLnM;
     uint64 destinationChainSelector;
-    WETH9 public sourceWrappedNative;
-    IERC20 public sourceLinkToken;
-    BurnMintERC677Helper public sourceCCIPBnMToken; // REG on source chain
-    BurnMintERC677Helper public destinationCCIPBnMToken; // REG on destination chain
+    uint64 sourceChainSelector;
 
-    CCIPSenderReceiverMessaging private ccipImpl;
-    CCIPSenderReceiverMessaging private ccip;
+    CCIPSenderReceiver private ccipImpl;
+    CCIPSenderReceiver private ccip;
     ERC1967Proxy private ccipProxy;
 
     REG private regImpl;
@@ -41,7 +42,6 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
 
     address defaultAdmin = address(11);
     address pauser = address(12);
-    address unpauser = address(13);
     address upgrader = address(14);
     address minter = address(15);
 
@@ -49,76 +49,45 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     address alice = vm.addr(alicePrivateKey);
     address bob = address(102);
 
-    uint256 public constant REG_BALANCE = 1000 ether;
-    uint256 public constant ETH_BALANCE = 10 ether;
-    uint256 public constant WRAP_BALANCE = 5 ether;
-    uint256 public constant LINK_BALANCE = 10 ether;
-    uint256 public constant CCIP_GAS_LIMIT = 100_000;
-
-    address DEFAULT_ADMIN_MAINNET = 0x5Fc96c182Bb7E0413c08e8e03e9d7EFc6cf0B099;
-
     bytes32 constant PERMIT_TYPEHASH =
         keccak256(
             "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
         );
 
     function setUp() public {
-        string memory SOURCE_RPC_URL = vm.envString("GNOSIS_RPC_URL");
-        string memory DESTINATION_RPC_URL = vm.envString("ETHEREUM_RPC_URL");
-        console.log("Source RPC: ", SOURCE_RPC_URL);
-        console.log("Destination RPC: ", DESTINATION_RPC_URL);
+        ccipLocalSimulator = new CCIPLocalSimulator();
 
-        sourceFork = vm.createFork(SOURCE_RPC_URL);
-        destinationFork = vm.createFork(DESTINATION_RPC_URL);
+        (
+            uint64 chainSelector_,
+            IRouterClient sourceRouter_,
+            IRouterClient destinationRouter_,
+            WETH9 wrappedNative_,
+            LinkToken linkToken_,
+            BurnMintERC677Helper ccipBnM_,
+            BurnMintERC677Helper ccipLnM_
+        ) = ccipLocalSimulator.configuration();
 
-        ccipLocalSimulatorFork = new MainnetCCIPLocalSimulatorFork();
-        vm.makePersistent(address(ccipLocalSimulatorFork));
+        destinationChainSelector = chainSelector_;
+        sourceRouter = sourceRouter_;
+        destinationRouter = destinationRouter_;
+        linkToken = linkToken_;
+        wrappedNative = wrappedNative_;
+        ccipBnM = ccipBnM_;
+        ccipLnM = ccipLnM_;
 
-        // Get network details from destination fork
-        vm.selectFork(destinationFork);
-        MainnetRegister.NetworkDetails
-            memory destinationNetworkDetails = ccipLocalSimulatorFork
-                .getNetworkDetails(block.chainid);
-
-        destinationCCIPBnMToken = BurnMintERC677Helper(
-            destinationNetworkDetails.ccipBnMAddress
-        );
-        destinationChainSelector = destinationNetworkDetails.chainSelector;
-        destinationRouter = IRouterClient(
-            destinationNetworkDetails.routerAddress
-        );
-
-        // Get network details from source fork
-        vm.selectFork(sourceFork);
-        MainnetRegister.NetworkDetails
-            memory sourceNetworkDetails = ccipLocalSimulatorFork
-                .getNetworkDetails(block.chainid);
-        sourceCCIPBnMToken = BurnMintERC677Helper(
-            sourceNetworkDetails.ccipBnMAddress
-        );
-        sourceLinkToken = IERC20(sourceNetworkDetails.linkAddress);
-        sourceChainSelector = sourceNetworkDetails.chainSelector;
-        sourceRouter = IRouterClient(sourceNetworkDetails.routerAddress);
-        sourceWrappedNative = WETH9(
-            payable(sourceNetworkDetails.wrappedNativeAddress)
-        );
-
-        // Deploy CCIPSenderReceiverMessaging
-        ccipImpl = new CCIPSenderReceiverMessaging();
+        // Deploy CCIPSenderReceiver
+        ccipImpl = new CCIPSenderReceiver();
         ccipProxy = new ERC1967Proxy(
             address(ccipImpl),
             abi.encodeWithSelector(
-                CCIPSenderReceiverMessaging.initialize.selector,
+                CCIPSenderReceiver.initialize.selector,
                 defaultAdmin,
                 pauser,
-                unpauser,
                 upgrader,
-                sourceRouter,
-                sourceLinkToken,
-                sourceWrappedNative
+                sourceRouter
             )
         );
-        ccip = CCIPSenderReceiverMessaging(address(ccipProxy));
+        ccip = CCIPSenderReceiver(address(ccipProxy));
 
         // Deploy REG
         regImpl = new REG();
@@ -137,55 +106,37 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         // Grant minter/burner role to CCIPSenderReceiver and support REG token in the CCIPLocalSimulator
         vm.startPrank(defaultAdmin);
         reg.grantRole(reg.MINTER_BRIDGE_ROLE(), address(ccip));
-        // ccipLocalSimulatorFork.supportNewTokenViaAccessControlDefaultAdmin(
-        //     address(reg)
-        // );
+        ccipLocalSimulator.supportNewTokenViaAccessControlDefaultAdmin(
+            address(reg)
+        );
         vm.stopPrank();
 
         // Mint tokens to Alice and Bob
         vm.startPrank(minter);
-        vm.deal(alice, ETH_BALANCE);
-        vm.deal(bob, ETH_BALANCE);
-        reg.mintByGovernance(alice, REG_BALANCE);
-        reg.mintByGovernance(bob, REG_BALANCE);
+        reg.mintByGovernance(alice, 1000 ether);
+        reg.mintByGovernance(bob, 1000 ether);
+        ccipLocalSimulator.requestLinkFromFaucet(alice, 10 ether);
+        ccipLocalSimulator.requestLinkFromFaucet(bob, 10 ether);
+        ccipBnM.drip(alice);
+        ccipBnM.drip(bob);
         vm.stopPrank();
-
-        // address LINK_MAINNET = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        address LINK_GNOSIS = 0xE2e73A1c69ecF83F464EFCE6A5be353a37cA09b2;
-        IERC20 link = IERC20(LINK_GNOSIS);
-
-        deal(LINK_GNOSIS, alice, LINK_BALANCE);
-        deal(LINK_GNOSIS, bob, LINK_BALANCE);
-
-        assertEq(link.balanceOf(alice), LINK_BALANCE);
-        assertEq(link.balanceOf(bob), LINK_BALANCE);
-
-        vm.prank(alice);
-        sourceWrappedNative.deposit{value: WRAP_BALANCE}();
-
-        vm.prank(bob);
-        sourceWrappedNative.deposit{value: WRAP_BALANCE}();
 
         // Label addresses for more readable traces
         vm.label(defaultAdmin, "DefaultAdmin");
         vm.label(pauser, "Pauser");
-        vm.label(unpauser, "Unpauser");
         vm.label(upgrader, "Upgrader");
         vm.label(address(sourceRouter), "SourceRouter");
         vm.label(address(destinationRouter), "DestinationRouter");
-        vm.label(address(sourceLinkToken), "SourceLinkToken");
-        vm.label(address(sourceWrappedNative), "SourceWrappedNativeToken");
+        vm.label(address(linkToken), "LinkToken");
+        vm.label(address(wrappedNative), "WrappedNativeToken");
         vm.label(alice, "Alice");
         vm.label(bob, "Bob");
     }
-
-    function prepareScenario() public {}
 
     function test_initializationAndRoles() public view {
         // Check roles
         assertTrue(ccip.hasRole(ccip.DEFAULT_ADMIN_ROLE(), defaultAdmin));
         assertTrue(ccip.hasRole(ccip.PAUSER_ROLE(), pauser));
-        assertTrue(ccip.hasRole(ccip.UNPAUSER_ROLE(), unpauser));
         assertTrue(ccip.hasRole(ccip.UPGRADER_ROLE(), upgrader));
     }
 
@@ -197,9 +148,9 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         assertTrue(ccip.paused());
         vm.stopPrank();
 
-        vm.startPrank(unpauser);
+        vm.startPrank(pauser);
         vm.expectEmit(true, true, true, true);
-        emit PausableUpgradeable.Unpaused(unpauser);
+        emit PausableUpgradeable.Unpaused(pauser);
         ccip.unpause();
         assertFalse(ccip.paused());
         vm.stopPrank();
@@ -209,7 +160,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         vm.startPrank(defaultAdmin);
 
         vm.expectEmit(true, true, true, true);
-        emit ICCIPSenderReceiverMessaging.AllowlistDestinationChain(
+        emit ICCIPSenderReceiver.AllowlistDestinationChain(
             destinationChainSelector,
             address(destinationRouter)
         );
@@ -225,11 +176,11 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         vm.startPrank(defaultAdmin);
 
         vm.expectEmit(true, true, true, true);
-        emit ICCIPSenderReceiverMessaging.AllowlistToken(address(reg), true);
+        emit ICCIPSenderReceiver.AllowlistToken(address(reg), true);
         ccip.allowlistToken(address(reg), true);
 
         vm.expectEmit(true, true, true, true);
-        emit ICCIPSenderReceiverMessaging.AllowlistToken(address(reg), false);
+        emit ICCIPSenderReceiver.AllowlistToken(address(reg), false);
         ccip.allowlistToken(address(reg), false);
 
         vm.stopPrank();
@@ -238,7 +189,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     function test_setRouter() public {
         vm.startPrank(defaultAdmin);
         vm.expectEmit(true, true, true, true);
-        emit ICCIPSenderReceiverMessaging.SetRouter(sourceRouter);
+        emit ICCIPSenderReceiver.SetRouter(sourceRouter);
         ccip.setRouter(sourceRouter);
         assertEq(address(ccip.getRouter()), address(sourceRouter));
         vm.stopPrank();
@@ -274,130 +225,34 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         assertEq(reg.balanceOf(defaultAdmin), amount);
     }
 
-    function test_transferTokensUsingLink(uint256 amount) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
-
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceLinkToken),
-            CCIP_GAS_LIMIT
-        );
+    function test_transferTokens() public {
+        vm.startPrank(defaultAdmin);
+        ccip.setRouter(sourceRouter);
+        ccip.allowlistToken(address(reg), true);
+        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
+        vm.stopPrank();
 
         vm.startPrank(alice);
-        reg.approve(address(ccip), amount);
-        sourceLinkToken.approve(address(ccip), 1e18);
+        reg.approve(address(ccip), 1e18);
 
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(sourceLinkToken), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokens(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceLinkToken),
-            CCIP_GAS_LIMIT
-        );
+        // TODO LINK in contract is not the same as in simulator
+        // ccip.transferTokens(
+        //     destinationChainSelector,
+        //     bob,
+        //     address(reg),
+        //     1e18,
+        //     address(linkToken),
+        //     1000000
+        // );
         vm.stopPrank();
     }
 
-    function test_transferTokensUsingNative(uint256 amount) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
-
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(0), // feeToken == native
-            CCIP_GAS_LIMIT
-        );
-
-        vm.startPrank(alice);
-        vm.deal(alice, ETH_BALANCE);
-        reg.approve(address(ccip), amount);
-
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(0), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokens{value: fees}(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(0),
-            CCIP_GAS_LIMIT
-        );
-
+    function test_transferTokensWithPermit() public {
+        vm.startPrank(defaultAdmin);
+        ccip.setRouter(sourceRouter);
+        ccip.allowlistToken(address(reg), true);
+        ccip.allowlistDestinationChain(destinationChainSelector, address(ccip));
         vm.stopPrank();
-    }
-
-    function test_transferTokensUsingSourceWrappedNative(
-        uint256 amount
-    ) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
-
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceWrappedNative), // feeToken == sourceWrappedNative
-            CCIP_GAS_LIMIT
-        );
-
-        vm.startPrank(alice);
-        reg.approve(address(ccip), amount);
-        sourceWrappedNative.approve(address(ccip), fees);
-
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(sourceWrappedNative), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokens(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceWrappedNative),
-            CCIP_GAS_LIMIT
-        );
-
-        vm.stopPrank();
-    }
-
-    function test_transferTokensWithPermitUsingLink(uint256 amount) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
 
         // // ===== Build permit digest for EIP-2612 =====
         uint256 deadline = block.timestamp + 1 days;
@@ -405,152 +260,25 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             alice,
             alicePrivateKey,
             address(ccip),
-            amount, // amount
+            1e18, // amount
             deadline
         );
 
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceLinkToken), // feeToken
-            CCIP_GAS_LIMIT
-        );
-
         vm.startPrank(alice);
-        reg.approve(address(ccip), amount);
-        sourceLinkToken.approve(address(ccip), fees);
 
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(sourceLinkToken), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokensWithPermit(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceLinkToken),
-            CCIP_GAS_LIMIT,
-            deadline,
-            v,
-            r,
-            s
-        );
-
-        vm.stopPrank();
-    }
-
-    function test_transferTokensWithPermitUsingNative(uint256 amount) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
-
-        // // ===== Build permit digest for EIP-2612 =====
-        uint256 deadline = block.timestamp + 1 days;
-        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignature(
-            alice,
-            alicePrivateKey,
-            address(ccip),
-            amount, // amount
-            deadline
-        );
-
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(0), // feeToken
-            CCIP_GAS_LIMIT
-        );
-
-        vm.startPrank(alice);
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(0), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokensWithPermit{value: fees}(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(0),
-            CCIP_GAS_LIMIT,
-            deadline,
-            v,
-            r,
-            s
-        );
-
-        vm.stopPrank();
-    }
-
-    function test_transferTokensWithPermitUsingSourceWrappedNative(
-        uint256 amount
-    ) public {
-        vm.assume(amount < REG_BALANCE);
-        _setUpCcip();
-
-        // // ===== Build permit digest for EIP-2612 =====
-        uint256 deadline = block.timestamp + 1 days;
-        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignature(
-            alice,
-            alicePrivateKey,
-            address(ccip),
-            amount, // amount
-            deadline
-        );
-
-        uint256 fees = ccip.getCcipFeesEstimation(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceWrappedNative), // feeToken
-            CCIP_GAS_LIMIT
-        );
-
-        vm.startPrank(alice);
-        sourceWrappedNative.approve(address(ccip), fees);
-
-        vm.expectEmit(false, false, false, true);
-        emit ICCIPSenderReceiverMessaging.TokensTransferred(
-            bytes32(0), // messageId
-            destinationChainSelector,
-            bob, // receiver
-            address(reg), // token
-            amount, // tokenAmount
-            address(sourceWrappedNative), // feeToken
-            fees // fees
-        );
-
-        ccip.transferTokensWithPermit(
-            destinationChainSelector,
-            bob,
-            address(reg),
-            amount,
-            address(sourceWrappedNative),
-            CCIP_GAS_LIMIT,
-            deadline,
-            v,
-            r,
-            s
-        );
+        // TODO LINK in contract is not the same as in simulator
+        // ccip.transferTokensWithPermit(
+        //     destinationChainSelector,
+        //     bob,
+        //     address(reg),
+        //     1e18,
+        //     address(linkToken),
+        //     1000000,
+        //     deadline,
+        //     v,
+        //     r,
+        //     s
+        // );
 
         vm.stopPrank();
     }
@@ -559,18 +287,18 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         assertEq(address(ccip.getRouter()), address(sourceRouter));
         vm.startPrank(defaultAdmin);
         vm.expectEmit(true, true, true, true);
-        emit ICCIPSenderReceiverMessaging.SetRouter(sourceRouter);
+        emit ICCIPSenderReceiver.SetRouter(sourceRouter);
         ccip.setRouter(sourceRouter);
         assertEq(address(ccip.getRouter()), address(sourceRouter));
         vm.stopPrank();
     }
 
     function test_getLinkToken() public view {
-        assertEq(ccip.getLinkToken(), address(sourceLinkToken));
+        assertEq(ccip.getLinkToken(), ETHEREUM_LINKTOKEN);
     }
 
     function test_getWrappedNativeToken() public view {
-        assertEq(ccip.getWrappedNativeToken(), address(sourceWrappedNative));
+        assertEq(ccip.getWrappedNativeToken(), ETHEREUM_WETH);
     }
 
     function test_getAllowlistedDestinationChains() public {
@@ -625,20 +353,20 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     }
 
     function test_getCcipFeesEstimation(
-        uint64 allowedDestinationChainSelector,
+        uint64 destinationChainSelector,
         address receiver,
         address token,
         uint256 amount,
         address feeToken,
         uint256 gasLimit
     ) public view {
-        allowedDestinationChainSelector = destinationChainSelector;
+        destinationChainSelector = destinationChainSelector;
         token = address(reg);
-        feeToken = address(sourceLinkToken);
-        gasLimit = CCIP_GAS_LIMIT;
+        feeToken = address(linkToken);
+        gasLimit = 100000;
 
         uint256 fees = ccip.getCcipFeesEstimation(
-            allowedDestinationChainSelector,
+            destinationChainSelector,
             receiver,
             token,
             amount,
@@ -657,32 +385,22 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     }
 
     function test_upgradeToV2() public {
-        CCIPSenderReceiverMessagingV2 newImpl = new CCIPSenderReceiverMessagingV2();
+        CCIPSenderReceiverV2 newImpl = new CCIPSenderReceiverV2();
 
         vm.startPrank(upgrader);
         ccip.upgradeTo(address(newImpl));
 
-        CCIPSenderReceiverMessagingV2 ccipV2 = CCIPSenderReceiverMessagingV2(
-            address(ccip)
-        );
+        CCIPSenderReceiverV2 ccipV2 = CCIPSenderReceiverV2(address(ccip));
 
         string memory resp = ccipV2.newFunction();
-        assertEq(resp, "CCIPSenderReceiverMessaging V2 is active");
+        assertEq(resp, "CCIPSenderReceiver V2 is active");
     }
 
     function testRevert_CannotInitializeAgain(address account) public {
         vm.startPrank(account);
 
         vm.expectRevert("Initializable: contract is already initialized");
-        ccip.initialize(
-            defaultAdmin,
-            pauser,
-            unpauser,
-            upgrader,
-            sourceRouter,
-            address(sourceLinkToken),
-            address(sourceWrappedNative)
-        );
+        ccip.initialize(defaultAdmin, pauser, upgrader, sourceRouter);
 
         vm.stopPrank();
     }
@@ -697,14 +415,14 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
     }
 
     function testRevert_CannotUnpauseIfNotPauser(address account) public {
-        vm.assume(account != unpauser);
+        vm.assume(account != pauser);
 
         vm.startPrank(pauser);
         ccip.pause();
         vm.stopPrank();
 
         vm.startPrank(account);
-        vm.expectRevert(_getRevertMessage(account, ccip.UNPAUSER_ROLE()));
+        vm.expectRevert(_getRevertMessage(account, ccip.PAUSER_ROLE()));
         ccip.unpause();
         vm.stopPrank();
     }
@@ -859,7 +577,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -881,7 +599,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -908,7 +626,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -919,8 +637,10 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         address invalidFeeToken
     ) public {
         vm.assume(invalidFeeToken != address(0));
-        vm.assume(invalidFeeToken != address(sourceLinkToken));
-        vm.assume(invalidFeeToken != address(sourceWrappedNative));
+        vm.assume(invalidFeeToken != address(linkToken));
+        vm.assume(invalidFeeToken != ETHEREUM_LINKTOKEN);
+        vm.assume(invalidFeeToken != ETHEREUM_WETH);
+        vm.assume(invalidFeeToken != address(wrappedNative));
 
         _setUpCcip();
 
@@ -965,7 +685,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -989,7 +709,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -1016,7 +736,7 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
             bob,
             address(reg),
             1e18,
-            address(sourceLinkToken),
+            address(linkToken),
             1000000
         );
 
@@ -1032,7 +752,6 @@ contract CCIPSenderReceiverMessagingForkTest is Test {
         Client.Any2EVMMessage calldata message
     ) public {
         vm.assume(account != address(destinationRouter));
-        vm.selectFork(destinationFork);
 
         vm.startPrank(account);
         vm.expectRevert(

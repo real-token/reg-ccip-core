@@ -25,6 +25,11 @@ optimizer_enabled=true
 [fuzz]
 runs = 10000
 
+[invariant]
+runs = 128
+depth = 32
+fail_on_revert = false
+
 remappings = [
 	'@openzeppelin/contracts@4.8.3/=node_modules/@openzeppelin/contracts-4.8.3/',
 	'@openzeppelin/contracts@5.0.2/=node_modules/@openzeppelin/contracts-5.0.2/',
