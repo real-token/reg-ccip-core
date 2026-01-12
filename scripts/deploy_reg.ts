@@ -9,20 +9,20 @@ async function main() {
     REG,
     [
       process.env.ADMIN,
-      process.env.MINTER,
       process.env.PAUSER,
+      process.env.MINTER,
       process.env.UPGRADER,
     ],
     { kind: "uups" }
   );
 
-  await reg.waitForDeployment();
+  await reg.deployed();
 
   const implAddress = await upgrades.erc1967.getImplementationAddress(
-    await reg.getAddress()
+    reg.address
   );
 
-  console.log(`Proxy address deployed: ${await reg.getAddress()}`);
+  console.log(`Proxy address deployed: ${reg.address}`);
   console.log(`Implementation address deployed: ${implAddress}`);
 
   function sleep(ms: number) {

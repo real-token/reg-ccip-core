@@ -1,41 +1,33 @@
-import hre, { ethers, upgrades, run } from "hardhat";
+import { ethers, upgrades, run } from "hardhat";
 import * as dotenv from "dotenv";
 dotenv.config();
 
 async function main() {
-  const REG = await ethers.getContractFactory("REG");
-
-  const provider = new ethers.JsonRpcProvider(
-    "http://127.0.0.1:1248", // RPC FRAME
-    {
-      chainId: hre.network.config.chainId ?? 5,
-      name: hre.network.name,
-    }
+  const CCIPSenderReceiverMessaging = await ethers.getContractFactory(
+    "CCIPSenderReceiverMessaging"
   );
-  const signer = await provider.getSigner();
-  const deployer = await signer.getAddress();
-  console.log("Using hardware wallet: ", deployer);
 
-  const reg = REG.connect(signer);
-
-  const regTx = await upgrades.deployProxy(
-    reg,
+  const ccipSenderReceiver = await upgrades.deployProxy(
+    CCIPSenderReceiverMessaging,
     [
       process.env.ADMIN,
       process.env.PAUSER,
-      process.env.MINTER,
+      process.env.UNPAUSER,
       process.env.UPGRADER,
+      process.env.ROUTER,
+      process.env.LINK_TOKEN,
+      process.env.WRAPPED_NATIVE,
     ],
     { kind: "uups" }
   );
 
-  await regTx.waitForDeployment();
+  await ccipSenderReceiver.deployed();
 
   const implAddress = await upgrades.erc1967.getImplementationAddress(
-    await regTx.getAddress()
+    ccipSenderReceiver.address
   );
 
-  console.log(`Proxy address deployed: ${await regTx.getAddress()}`);
+  console.log(`Proxy address deployed: ${ccipSenderReceiver.address}`);
   console.log(`Implementation address deployed: ${implAddress}`);
 
   function sleep(ms: number) {
