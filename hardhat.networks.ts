@@ -19,19 +19,11 @@ if (FORK) {
   networks.hardhat = {};
 }
 
+// Mainnet
 if (process.env.MAINNET_RPC_URL && process.env.PRIVATE_KEY) {
   networks.mainnet = {
     url: process.env.MAINNET_RPC_URL,
     chainId: 1,
-    gasPrice: "auto",
-    accounts: [process.env.PRIVATE_KEY],
-  };
-}
-
-if (process.env.SEPOLIA_RPC_URL && process.env.PRIVATE_KEY) {
-  networks.sepolia = {
-    url: process.env.SEPOLIA_RPC_URL,
-    chainId: 11155111,
     gasPrice: "auto",
     accounts: [process.env.PRIVATE_KEY],
   };
@@ -55,10 +47,20 @@ if (process.env.POLYGON_RPC_URL && process.env.PRIVATE_KEY) {
   };
 }
 
-if (process.env.MUMBAI_RPC_URL && process.env.PRIVATE_KEY) {
-  networks.polygonMumbai = {
-    url: process.env.MUMBAI_RPC_URL,
-    chainId: 80001,
+// Testnet
+if (process.env.SEPOLIA_RPC_URL && process.env.PRIVATE_KEY) {
+  networks.sepolia = {
+    url: process.env.SEPOLIA_RPC_URL,
+    chainId: 11155111,
+    gasPrice: "auto",
+    accounts: [process.env.PRIVATE_KEY],
+  };
+}
+
+if (process.env.AMOY_RPC_URL && process.env.PRIVATE_KEY) {
+  networks.amoy = {
+    url: process.env.AMOY_RPC_URL,
+    chainId: 80002,
     gasPrice: "auto",
     accounts: [process.env.PRIVATE_KEY],
   };
@@ -68,6 +70,15 @@ if (process.env.FUJI_RPC_URL && process.env.PRIVATE_KEY) {
   networks.fuji = {
     url: process.env.FUJI_RPC_URL,
     chainId: 43113,
+    gasPrice: "auto",
+    accounts: [process.env.PRIVATE_KEY],
+  };
+}
+
+if (process.env.CHIADO_RPC_URL && process.env.PRIVATE_KEY) {
+  networks.chiado = {
+    url: process.env.CHIADO_RPC_URL,
+    chainId: 10200,
     gasPrice: "auto",
     accounts: [process.env.PRIVATE_KEY],
   };
