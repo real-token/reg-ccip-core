@@ -22,6 +22,27 @@ solc_version="0.8.24"
 optimizer_runs=100000
 optimizer_enabled=true
 
+auto_detect_remappings = false
+remappings = [
+  '@openzeppelin/contracts@4.8.3/=node_modules/@openzeppelin/contracts-4.8.3/',
+  '@openzeppelin/contracts@5.0.2/=node_modules/@openzeppelin/contracts-5.0.2/',
+  '@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/',
+  '@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/',
+  '@openzeppelin/foundry-upgrades/=node_modules/@openzeppelin/foundry-upgrades/',
+  '@chainlink/contracts/=node_modules/@chainlink/contracts/',
+  '@chainlink/contracts-ccip/=node_modules/@chainlink/contracts-ccip/',
+  '@chainlink/local/=node_modules/@chainlink/local/',
+  'forge-std/=lib/forge-std/src/',
+  'solady/=node_modules/solady/',
+  'hardhat/=node_modules/hardhat/',
+  'hardhat-deploy/=node_modules/hardhat-deploy/',
+  'solidity-stringutils/=node_modules/@openzeppelin/foundry-upgrades/lib/solidity-stringutils/',
+  'ds-test/=node_modules/@openzeppelin/foundry-upgrades/lib/solidity-stringutils/lib/ds-test/',
+  'chainlink-local/=lib/chainlink-local/src/',
+  'chainlink-evm/=lib/chainlink-local/lib/chainlink-evm/',
+  'chainlink-ccip/=lib/chainlink-local/lib/chainlink-ccip/chains/evm/contracts/vendor/optimism/interop-lib/v0/src/'
+]
+
 [fuzz]
 runs = 10000
 
@@ -29,17 +50,6 @@ runs = 10000
 runs = 128
 depth = 32
 fail_on_revert = false
-
-remappings = [
-	'@openzeppelin/contracts@4.8.3/=node_modules/@openzeppelin/contracts-4.8.3/',
-	'@openzeppelin/contracts@5.0.2/=node_modules/@openzeppelin/contracts-5.0.2/',
-  '@openzeppelin/contracts=node_modules/@openzeppelin/contracts',
-	'@openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable',
-	'@chainlink/contracts=node_modules/@chainlink/contracts',
-	'@chainlink/contracts-ccip=node_modules/@chainlink/contracts-ccip',
-	'@chainlink/local=node_modules/@chainlink/local'
-	# '@openzeppelin/foundry-upgrades=node_modules/@openzeppelin/foundry-upgrades'
-]
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }

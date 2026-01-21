@@ -20,6 +20,22 @@ interface ICCIPSenderReceiverMessaging {
         bool isInList;
     }
 
+    struct TokenMappingState {
+        address destinationToken;
+        bool isInList;
+    }
+
+    /// @dev Struct for building CCIP messages to avoid stack too deep
+    struct CCIPMessageParams {
+        address receiver;
+        address sourceToken;
+        address destToken;
+        uint256 amount;
+        address feeToken;
+        address ccipReceiver;
+        uint256 gasLimit;
+    }
+
     /**
      * @dev Emitted when the tokens are transferred to an account on another chain
      * @param messageId The unique ID of the message
@@ -82,6 +98,50 @@ interface ICCIPSenderReceiverMessaging {
     event SetRouter(IRouterClient indexed router);
 
     /**
+     * @dev Emitted when tokens are mapped to a destination chain
+     * @param sourceToken The source token address
+     * @param chainSelector The destination chain selector
+     * @param destinationToken The destination token address
+     */
+    event TokenMapped(
+        address indexed sourceToken,
+        uint64 indexed chainSelector,
+        address indexed destinationToken
+    );
+
+    /**
+     * @dev Emitted when token mapping is removed
+     * @param sourceToken The source token address
+     * @param chainSelector The destination chain selector
+     */
+    event TokenUnmapped(
+        address indexed sourceToken,
+        uint64 indexed chainSelector
+    );
+
+    /**
+     * @dev Emitted when max chain amount is set
+     * @param token The token address
+     * @param chainSelector The destination chain selector
+     * @param maxAmount The max amount that can be bridged
+     */
+    event MaxChainAmountSet(
+        address indexed token,
+        uint64 indexed chainSelector,
+        uint256 maxAmount
+    );
+
+    /**
+     * @dev Emitted when max chain amount is removed
+     * @param token The token address
+     * @param chainSelector The destination chain selector
+     */
+    event MaxChainAmountRemoved(
+        address indexed token,
+        uint64 indexed chainSelector
+    );
+
+    /**
      * @dev Updates the allowlist status of a destination chain for transactions
      * @notice This function can only be called by the owner
      * - Only callable by the DEFAULT_ADMIN_ROLE
@@ -108,6 +168,54 @@ interface ICCIPSenderReceiverMessaging {
      * @param router The CCIP router address
      */
     function setRouter(IRouterClient router) external;
+
+    /**
+     * @dev Map source tokens to destination tokens for a specific chain
+     * - Only callable by the DEFAULT_ADMIN_ROLE
+     * @param chainSelector The destination chain selector
+     * @param sourceTokens Array of source token addresses
+     * @param destinationTokens Array of corresponding destination token addresses
+     */
+    function setMappedTokens(
+        uint64 chainSelector,
+        address[] calldata sourceTokens,
+        address[] calldata destinationTokens
+    ) external;
+
+    /**
+     * @dev Remove token mappings for a specific chain
+     * - Only callable by the DEFAULT_ADMIN_ROLE
+     * @param chainSelector The destination chain selector
+     * @param sourceTokens Array of source token addresses to remove
+     */
+    function removeMappedTokens(
+        uint64 chainSelector,
+        address[] calldata sourceTokens
+    ) external;
+
+    /**
+     * @dev Set max bridging amount for tokens on a specific chain
+     * - Only callable by the DEFAULT_ADMIN_ROLE
+     * @param chainSelector The destination chain selector
+     * @param tokens Array of token addresses
+     * @param amounts Array of max amounts
+     */
+    function setMaxChainAmount(
+        uint64 chainSelector,
+        address[] calldata tokens,
+        uint256[] calldata amounts
+    ) external;
+
+    /**
+     * @dev Remove max bridging amount limits for tokens on a specific chain
+     * - Only callable by the DEFAULT_ADMIN_ROLE
+     * @param chainSelector The destination chain selector
+     * @param tokens Array of token addresses
+     */
+    function removeMaxChainAmount(
+        uint64 chainSelector,
+        address[] calldata tokens
+    ) external;
 
     /**
      * @notice Transfer tokens to receiver on the destination chain
@@ -244,4 +352,57 @@ interface ICCIPSenderReceiverMessaging {
         address feeToken,
         uint256 gasLimit
     ) external view returns (uint256);
+
+    /**
+     * @notice Returns the mapped destination token for a source token on a specific chain
+     * @param sourceToken The source token address
+     * @param chainSelector The destination chain selector
+     * @return The destination token address
+     */
+    function getMappedToken(
+        address sourceToken,
+        uint64 chainSelector
+    ) external view returns (address);
+
+    /**
+     * @notice Returns whether a token is mapped to a specific chain
+     * @param sourceToken The source token address
+     * @param chainSelector The destination chain selector
+     * @return True if the token is mapped
+     */
+    function isTokenMapped(
+        address sourceToken,
+        uint64 chainSelector
+    ) external view returns (bool);
+
+    /**
+     * @notice Returns the max bridging amount for a token on a specific chain
+     * @param token The token address
+     * @param chainSelector The destination chain selector
+     * @return The max amount that can be bridged
+     */
+    function getMaxChainAmount(
+        address token,
+        uint64 chainSelector
+    ) external view returns (uint256);
+
+    /**
+     * @notice Returns the total bridged amount for a token across all chains
+     * @param token The token address
+     * @return The total bridged amount (negative = outbound, positive = inbound)
+     */
+    function getTotalBridgedAmount(
+        address token
+    ) external view returns (int256);
+
+    /**
+     * @notice Returns the bridged amount for a token on a specific chain
+     * @param token The token address
+     * @param chainSelector The destination chain selector
+     * @return The bridged amount (negative = outbound, positive = inbound)
+     */
+    function getChainBridgedAmount(
+        address token,
+        uint64 chainSelector
+    ) external view returns (int256);
 }

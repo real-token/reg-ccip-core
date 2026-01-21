@@ -11,15 +11,15 @@ import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRou
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
-import {CCIPErrors} from "../libraries/CCIPErrors.sol";
+import {CCIPMessagingErrors} from "../libraries/CCIPMessagingErrors.sol";
 import {IERC20WithPermit} from "../interfaces/IERC20WithPermit.sol";
 import {IMintableBurnableERC20} from "../interfaces/IMintableBurnableERC20.sol";
 import {ICCIPSenderReceiverMessaging} from "../interfaces/ICCIPSenderReceiverMessaging.sol";
 
 /**
  * @title CCIPSenderReceiverMessaging
- * @author RealT, version of RealT CCIP Sender based on Chainlink CCIP
- * @notice The contract of REG CCIP Sender for cross-chain token transfers
+ * @author RealToken Inc.
+ * @notice The entry contract for cross-chain token transfers using CCIP messaging
  */
 contract CCIPSenderReceiverMessaging is
     PausableUpgradeable,
@@ -32,13 +32,13 @@ contract CCIPSenderReceiverMessaging is
     using SafeERC20 for IMintableBurnableERC20;
 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-
     bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
-
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     IRouterClient private _router;
+
     address private _linkToken;
+
     address private _wrappedNativeToken;
 
     // Mapping to keep track of allowlisted destination chains
@@ -50,10 +50,26 @@ contract CCIPSenderReceiverMessaging is
 
     address[] private _tokensListHistory;
 
+    // Token mapping: sourceToken => destinationChainSelector => destinationToken
+    mapping(address => mapping(uint64 => TokenMappingState))
+        private _tokenMappings;
+
+    // Max bridging amount per token per chain
+    mapping(address => mapping(uint64 => uint256)) private _chainMaxAmount;
+
+    // Bridged amount tracking per token per chain (negative = outbound, positive = inbound)
+    mapping(address => mapping(uint64 => int256)) private _chainBridgedAmount;
+
+    // Total bridged amount per token across all chains
+    mapping(address => int256) private _totalBridgedAmount;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
+
+    /// @notice Receive function to accept ETH
+    receive() external payable {}
 
     /// @notice Initializes the contract
     /// @param defaultAdmin The address of the default admin
@@ -84,6 +100,8 @@ contract CCIPSenderReceiverMessaging is
         _router = router;
         _linkToken = linkToken;
         _wrappedNativeToken = wrappedNativeToken;
+
+        emit SetRouter(router);
     }
 
     /**
@@ -120,7 +138,7 @@ contract CCIPSenderReceiverMessaging is
             _allowlistedChains[destinationChainSelector]
                 .destinationChainReceiver == address(0)
         )
-            revert CCIPErrors.DestinationChainNotAllowlisted(
+            revert CCIPMessagingErrors.DestinationChainNotAllowlisted(
                 destinationChainSelector
             );
         _;
@@ -132,7 +150,7 @@ contract CCIPSenderReceiverMessaging is
      */
     modifier onlyAllowlistedToken(address token) {
         if (!_allowlistedTokens[token].isAllowed)
-            revert CCIPErrors.TokenNotAllowlisted(token);
+            revert CCIPMessagingErrors.TokenNotAllowlisted(token);
         _;
     }
 
@@ -142,7 +160,7 @@ contract CCIPSenderReceiverMessaging is
      */
     modifier validateContractAddress(address contractAddress) {
         if (!AddressUpgradeable.isContract(contractAddress))
-            revert CCIPErrors.InvalidContractAddress();
+            revert CCIPMessagingErrors.InvalidContractAddress();
         _;
     }
 
@@ -151,14 +169,15 @@ contract CCIPSenderReceiverMessaging is
      * @param receiver The receiver address
      */
     modifier validateReceiver(address receiver) {
-        if (receiver == address(0)) revert CCIPErrors.InvalidReceiverAddress();
+        if (receiver == address(0))
+            revert CCIPMessagingErrors.InvalidReceiverAddress();
         _;
     }
 
     /// @dev only calls from the set router are accepted.
     modifier onlyRouter() {
         if (msg.sender != address(_router))
-            revert CCIPErrors.InvalidRouter(msg.sender);
+            revert CCIPMessagingErrors.InvalidRouter(msg.sender);
         _;
     }
 
@@ -172,7 +191,7 @@ contract CCIPSenderReceiverMessaging is
         ];
 
         if (chainState.destinationChainReceiver == destinationChainReceiver) {
-            revert CCIPErrors.AllowedStateNotChange();
+            revert CCIPMessagingErrors.AllowedStateNotChange();
         }
 
         chainState.destinationChainReceiver = destinationChainReceiver;
@@ -196,7 +215,7 @@ contract CCIPSenderReceiverMessaging is
         AllowlistTokenState storage tokenState = _allowlistedTokens[token];
 
         if (tokenState.isAllowed == allowed) {
-            revert CCIPErrors.AllowedStateNotChange();
+            revert CCIPMessagingErrors.AllowedStateNotChange();
         }
 
         tokenState.isAllowed = allowed;
@@ -222,6 +241,121 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
+    function setMappedTokens(
+        uint64 chainSelector,
+        address[] calldata sourceTokens,
+        address[] calldata destinationTokens
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 length = sourceTokens.length;
+        if (length == 0) revert CCIPMessagingErrors.EmptyArray();
+        if (length != destinationTokens.length)
+            revert CCIPMessagingErrors.ArrayLengthMismatch();
+
+        for (uint256 i = 0; i < length; ) {
+            if (
+                sourceTokens[i] == address(0) ||
+                destinationTokens[i] == address(0)
+            ) revert CCIPMessagingErrors.ZeroAddress();
+
+            TokenMappingState storage mappingState = _tokenMappings[
+                sourceTokens[i]
+            ][chainSelector];
+            mappingState.destinationToken = destinationTokens[i];
+
+            if (!mappingState.isInList) {
+                mappingState.isInList = true;
+            }
+
+            emit TokenMapped(
+                sourceTokens[i],
+                chainSelector,
+                destinationTokens[i]
+            );
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function removeMappedTokens(
+        uint64 chainSelector,
+        address[] calldata sourceTokens
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 length = sourceTokens.length;
+        if (length == 0) revert CCIPMessagingErrors.EmptyArray();
+
+        for (uint256 i = 0; i < length; ) {
+            if (
+                _tokenMappings[sourceTokens[i]][chainSelector]
+                    .destinationToken == address(0)
+            )
+                revert CCIPMessagingErrors.TokenNotMapped(
+                    sourceTokens[i],
+                    chainSelector
+                );
+
+            delete _tokenMappings[sourceTokens[i]][chainSelector]
+                .destinationToken;
+
+            emit TokenUnmapped(sourceTokens[i], chainSelector);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function setMaxChainAmount(
+        uint64 chainSelector,
+        address[] calldata tokens,
+        uint256[] calldata amounts
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 length = tokens.length;
+        if (length == 0) revert CCIPMessagingErrors.EmptyArray();
+        if (length != amounts.length)
+            revert CCIPMessagingErrors.ArrayLengthMismatch();
+
+        for (uint256 i = 0; i < length; ) {
+            if (tokens[i] == address(0))
+                revert CCIPMessagingErrors.ZeroAddress();
+            if (amounts[i] == 0) revert CCIPMessagingErrors.ZeroAmount();
+
+            _chainMaxAmount[tokens[i]][chainSelector] = amounts[i];
+
+            emit MaxChainAmountSet(tokens[i], chainSelector, amounts[i]);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function removeMaxChainAmount(
+        uint64 chainSelector,
+        address[] calldata tokens
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 length = tokens.length;
+        if (length == 0) revert CCIPMessagingErrors.EmptyArray();
+
+        for (uint256 i = 0; i < length; ) {
+            if (_chainMaxAmount[tokens[i]][chainSelector] == 0)
+                revert CCIPMessagingErrors.ZeroAmount();
+
+            delete _chainMaxAmount[tokens[i]][chainSelector];
+
+            emit MaxChainAmountRemoved(tokens[i], chainSelector);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
     function withdraw(
         address beneficiary
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -229,7 +363,7 @@ contract CCIPSenderReceiverMessaging is
         uint256 amount = address(this).balance;
 
         // Revert if there is nothing to withdraw
-        if (amount == 0) revert CCIPErrors.NothingToWithdraw();
+        if (amount == 0) revert CCIPMessagingErrors.NothingToWithdraw();
 
         // Attempt to send the funds, capturing the success status and discarding any return data
         // This is considered safe because the beneficiary is chosen by admin
@@ -237,7 +371,7 @@ contract CCIPSenderReceiverMessaging is
 
         // Revert if the send failed, with information about the attempted transfer
         if (!sent)
-            revert CCIPErrors.FailedToWithdrawEth(
+            revert CCIPMessagingErrors.FailedToWithdrawEth(
                 msg.sender,
                 beneficiary,
                 amount,
@@ -254,7 +388,7 @@ contract CCIPSenderReceiverMessaging is
         uint256 amount = token.balanceOf(address(this));
 
         // Revert if there is nothing to withdraw
-        if (amount == 0) revert CCIPErrors.NothingToWithdraw();
+        if (amount == 0) revert CCIPMessagingErrors.NothingToWithdraw();
 
         token.safeTransfer(beneficiary, amount);
     }
@@ -398,65 +532,34 @@ contract CCIPSenderReceiverMessaging is
             feeToken != _linkToken &&
             feeToken != _wrappedNativeToken
         ) {
-            revert CCIPErrors.InvalidFeeToken(feeToken);
+            revert CCIPMessagingErrors.InvalidFeeToken(feeToken);
         }
-        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        //  address(linkToken) means fees are paid in LINK
 
-        address ccipReceiver = _allowlistedChains[destinationChainSelector]
-            .destinationChainReceiver;
-        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
-            receiver, // final receiver to receive the token
-            token, // token address
-            amount, // amount of token
-            feeToken, // token for CCIP fees (LINK or native gas)
-            ccipReceiver, // CCIPReceiver on destination chain,
-            gasLimit // gasLimit, adjust this value as needed
+        // Check token mapping and max bridged amount
+        _validateBridgeLimits(token, destinationChainSelector, amount);
+
+        // Build CCIP message params
+        CCIPMessageParams memory params = CCIPMessageParams({
+            receiver: receiver,
+            sourceToken: token,
+            destToken: _tokenMappings[token][destinationChainSelector]
+                .destinationToken,
+            amount: amount,
+            feeToken: feeToken,
+            ccipReceiver: _allowlistedChains[destinationChainSelector]
+                .destinationChainReceiver,
+            gasLimit: gasLimit
+        });
+
+        // Get the fee and send message
+        uint256 fees;
+        (messageId, fees) = _burnAndSendCCIP(
+            destinationChainSelector,
+            token,
+            amount,
+            feeToken,
+            params
         );
-
-        // Get the fee required to send the message
-        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
-
-        // Transfer REG token from the user to this contract then burn it
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        IMintableBurnableERC20(token).burn(amount);
-
-        if (feeToken == address(0)) {
-            // Check if msg.value is enough to pay for the fees
-            if (fees > msg.value)
-                revert CCIPErrors.NotEnoughBalance(msg.value, fees);
-
-            // If the user sent more than the required fees, send the excess back
-            // Do not require strictly equal here, as the user may send more than the required fees, just return the excess
-            // Until here, user transfer token + fees to this contract, refund if msg.value > fees
-            if (msg.value > fees) {
-                (bool sent, bytes memory data) = msg.sender.call{
-                    value: msg.value - fees
-                }("");
-                if (!sent) revert CCIPErrors.FailedToRefund(data);
-            }
-
-            // Send the message through the router and store the returned message ID
-            // Safe to interact with Chainlink Router as it is a trusted contract
-            messageId = _router.ccipSend{value: fees}(
-                destinationChainSelector,
-                evm2AnyMessage
-            );
-        } else {
-            IERC20 feeTokenInstance = IERC20(feeToken);
-            // Transfer LINK token from the user to this contract
-            // If user does not have enough feeToken, the safeTransferFrom will fail first
-            feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
-
-            // approve the Router to transfer LINK tokens on contract's behalf. It will spend the fees in LINK
-            feeTokenInstance.safeIncreaseAllowance(address(_router), fees);
-
-            // Send the message through the router and store the returned message ID
-            messageId = _router.ccipSend(
-                destinationChainSelector,
-                evm2AnyMessage
-            );
-        }
 
         // Emit an event with message details
         emit TokensTransferred(
@@ -468,42 +571,182 @@ contract CCIPSenderReceiverMessaging is
             feeToken,
             fees
         );
+    }
 
-        // Return the message ID
-        return messageId;
+    /**
+     * @notice Validate bridge limits for token transfer
+     * @param token The token address
+     * @param chainSelector The destination chain selector
+     * @param amount The amount to bridge
+     */
+    function _validateBridgeLimits(
+        address token,
+        uint64 chainSelector,
+        uint256 amount
+    ) private view {
+        // Check token mapping exists
+        if (_tokenMappings[token][chainSelector].destinationToken == address(0))
+            revert CCIPMessagingErrors.TokenNotMapped(token, chainSelector);
+
+        // Check max bridged amount if limit is set
+        uint256 maxAmount = _chainMaxAmount[token][chainSelector];
+        if (maxAmount > 0) {
+            int256 currentBridged = _chainBridgedAmount[token][chainSelector];
+            // Outbound bridging is negative, so we check if (currentBridged - amount) would exceed -maxAmount
+            // This means: amount - currentBridged <= maxAmount (after rearranging)
+            if (int256(amount) - currentBridged > int256(maxAmount)) {
+                revert CCIPMessagingErrors.MaxBridgedAmountExceeded(
+                    token,
+                    chainSelector,
+                    currentBridged,
+                    amount,
+                    maxAmount
+                );
+            }
+        }
+    }
+
+    /**
+     * @notice Burns tokens and sends CCIP message
+     * @param chainSelector The destination chain selector
+     * @param token The token address
+     * @param amount The amount to bridge
+     * @param feeToken The fee token address
+     * @param params The CCIP message params
+     * @return messageId The CCIP message ID
+     * @return fees The fees paid
+     */
+    function _burnAndSendCCIP(
+        uint64 chainSelector,
+        address token,
+        uint256 amount,
+        address feeToken,
+        CCIPMessageParams memory params
+    ) private returns (bytes32 messageId, uint256 fees) {
+        // Build the CCIP message
+        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(params);
+
+        // Get the fee required to send the message
+        fees = _router.getFee(chainSelector, evm2AnyMessage);
+
+        // Transfer token from the user to this contract then burn it
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        bool success = IMintableBurnableERC20(token).burn(amount);
+        if (!success) revert CCIPMessagingErrors.FailedToBurnToken();
+
+        // Update bridged amount tracking (outbound is negative)
+        _chainBridgedAmount[token][chainSelector] -= int256(amount);
+        _totalBridgedAmount[token] -= int256(amount);
+
+        // Handle fee payment and send message
+        messageId = _handleFeesAndSend(
+            chainSelector,
+            feeToken,
+            fees,
+            evm2AnyMessage
+        );
+    }
+
+    /**
+     * @notice Handles fee payment and sends CCIP message
+     * @param chainSelector The destination chain selector
+     * @param feeToken The fee token address
+     * @param fees The fees to pay
+     * @param evm2AnyMessage The CCIP message
+     * @return messageId The CCIP message ID
+     */
+    function _handleFeesAndSend(
+        uint64 chainSelector,
+        address feeToken,
+        uint256 fees,
+        Client.EVM2AnyMessage memory evm2AnyMessage
+    ) private returns (bytes32 messageId) {
+        if (feeToken == address(0)) {
+            messageId = _handleNativeFeeAndSend(
+                chainSelector,
+                fees,
+                evm2AnyMessage
+            );
+        } else {
+            messageId = _handleTokenFeeAndSend(
+                chainSelector,
+                feeToken,
+                fees,
+                evm2AnyMessage
+            );
+        }
+    }
+
+    /**
+     * @notice Handles native fee payment and sends CCIP message
+     */
+    function _handleNativeFeeAndSend(
+        uint64 chainSelector,
+        uint256 fees,
+        Client.EVM2AnyMessage memory evm2AnyMessage
+    ) private returns (bytes32 messageId) {
+        // Check if msg.value is enough to pay for the fees
+        if (fees > msg.value)
+            revert CCIPMessagingErrors.NotEnoughBalance(msg.value, fees);
+        // If the user sent more than the required fees, send the excess back
+        if (msg.value > fees) {
+            (bool sent, bytes memory data) = msg.sender.call{
+                value: msg.value - fees
+            }("");
+            if (!sent) revert CCIPMessagingErrors.FailedToRefund(data);
+        }
+        messageId = _router.ccipSend{value: fees}(
+            chainSelector,
+            evm2AnyMessage
+        );
+    }
+
+    /**
+     * @notice Handles token fee payment and sends CCIP message
+     */
+    function _handleTokenFeeAndSend(
+        uint64 chainSelector,
+        address feeToken,
+        uint256 fees,
+        Client.EVM2AnyMessage memory evm2AnyMessage
+    ) private returns (bytes32 messageId) {
+        IERC20 feeTokenInstance = IERC20(feeToken);
+
+        // Transfer fee token from the user to this contract
+        feeTokenInstance.safeTransferFrom(msg.sender, address(this), fees);
+
+        // approve the Router to transfer fee tokens on contract's behalf
+        feeTokenInstance.safeIncreaseAllowance(address(_router), fees);
+
+        messageId = _router.ccipSend(chainSelector, evm2AnyMessage);
     }
 
     /**
      * @notice Construct a CCIP message
      * @dev This function will create an EVM2AnyMessage struct with all the necessary information for tokens transfer
-     * @param receiver The address of the receiver
-     * @param token The token to be transferred
-     * @param amount The amount of the token to be transferred
-     * @param feeToken The address of the token used for fees. Set address(0) for native gas
-     * @param ccipReceiver The address of the CCIPSenderReceiver on the destination chain
-     * @param gasLimit The gas limit for the ccipReceive function call on the destination chain
+     * @param params The CCIPMessageParams struct containing all message parameters
      * @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message
      */
     function _buildCCIPMessage(
-        address receiver,
-        address token,
-        uint256 amount,
-        address feeToken,
-        address ccipReceiver,
-        uint256 gasLimit
+        CCIPMessageParams memory params
     ) private pure returns (Client.EVM2AnyMessage memory) {
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         return
             Client.EVM2AnyMessage({
-                receiver: abi.encode(ccipReceiver), // ABI-encoded receiver address
-                data: abi.encode(token, amount, receiver), // Encode the data with complete information for destination chain
+                receiver: abi.encode(params.ccipReceiver), // ABI-encoded receiver address
+                data: abi.encode(
+                    params.sourceToken,
+                    params.destToken,
+                    params.amount,
+                    params.receiver
+                ), // Encode with source token, dest token, amount, and receiver
                 tokenAmounts: new Client.EVMTokenAmount[](0), // Empty array as no tokens are transferred
                 extraArgs: Client._argsToBytes(
                     // Setting gas limit for action on destination chain
-                    Client.EVMExtraArgsV1({gasLimit: gasLimit})
+                    Client.EVMExtraArgsV1({gasLimit: params.gasLimit})
                 ),
                 // Set the feeToken to a feeToken, indicating specific asset will be used for fees
-                feeToken: feeToken
+                feeToken: params.feeToken
             });
     }
 
@@ -516,23 +759,19 @@ contract CCIPSenderReceiverMessaging is
         address feeToken,
         uint256 gasLimit
     ) external view returns (uint256) {
-        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        // address(0) means fees are paid in native gas
-        Client.EVM2AnyMessage memory evm2AnyMessage = _buildCCIPMessage(
-            receiver,
-            token,
-            amount,
-            feeToken,
-            _allowlistedChains[destinationChainSelector]
+        CCIPMessageParams memory params = CCIPMessageParams({
+            receiver: receiver,
+            sourceToken: token,
+            destToken: _tokenMappings[token][destinationChainSelector]
+                .destinationToken,
+            amount: amount,
+            feeToken: feeToken,
+            ccipReceiver: _allowlistedChains[destinationChainSelector]
                 .destinationChainReceiver,
-            gasLimit
-        );
-
-        // Get the fee required to send the message
-        uint256 fees = _router.getFee(destinationChainSelector, evm2AnyMessage);
-
-        // Return fees in feeToken
-        return fees;
+            gasLimit: gasLimit
+        });
+        return
+            _router.getFee(destinationChainSelector, _buildCCIPMessage(params));
     }
 
     //**************************************** Receiver Logic starts here ****************************************/
@@ -560,25 +799,43 @@ contract CCIPSenderReceiverMessaging is
         Client.Any2EVMMessage calldata message
     ) external override whenNotPaused onlyRouter {
         // Handle the received message, emit event with all information for subgraph to index
-        // TokenPool minted to receiver (CCIPSenderReceiverReceiver), then need to transfer to user address from data in message
         bytes32 messageId = message.messageId; // fetch the messageId
         uint64 sourceChainSelector = message.sourceChainSelector; // fetch the source chain selector
         address sender = abi.decode(message.sender, (address)); // abi-decoding of the CCIPSender address
-        (address token, uint256 amount, address receiver) = abi.decode(
-            message.data,
-            (address, uint256, address)
-        );
+
+        // Decode the new message format: (sourceToken, destToken, amount, receiver)
+        (
+            address sourceToken,
+            address destToken,
+            uint256 amount,
+            address receiver
+        ) = abi.decode(message.data, (address, address, uint256, address));
 
         // Validate the sender is allowlisted
         if (
             _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
             sender
         ) {
-            revert CCIPErrors.InvalidSender(sender);
+            revert CCIPMessagingErrors.InvalidSender(sender);
         }
 
-        // Transfer the token to the receiver
-        IMintableBurnableERC20(token).mint(receiver, amount);
+        // Verify the token mapping is correct (source token from sender chain should map to destToken here)
+        address expectedSourceToken = _tokenMappings[destToken][
+            sourceChainSelector
+        ].destinationToken;
+        if (expectedSourceToken != sourceToken) {
+            revert CCIPMessagingErrors.TokenNotMapped(
+                destToken,
+                sourceChainSelector
+            );
+        }
+
+        // Mint the destination token to the receiver
+        IMintableBurnableERC20(destToken).mint(receiver, amount);
+
+        // Update bridged amount tracking (inbound is positive)
+        _chainBridgedAmount[destToken][sourceChainSelector] += int256(amount);
+        _totalBridgedAmount[destToken] += int256(amount);
 
         // Emit an event with the message details
         emit TokensReceived(
@@ -586,8 +843,49 @@ contract CCIPSenderReceiverMessaging is
             sourceChainSelector,
             sender,
             receiver,
-            token,
+            destToken,
             amount
         );
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getMappedToken(
+        address sourceToken,
+        uint64 chainSelector
+    ) external view returns (address) {
+        return _tokenMappings[sourceToken][chainSelector].destinationToken;
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function isTokenMapped(
+        address sourceToken,
+        uint64 chainSelector
+    ) external view returns (bool) {
+        return
+            _tokenMappings[sourceToken][chainSelector].destinationToken !=
+            address(0);
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getMaxChainAmount(
+        address token,
+        uint64 chainSelector
+    ) external view returns (uint256) {
+        return _chainMaxAmount[token][chainSelector];
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getTotalBridgedAmount(
+        address token
+    ) external view returns (int256) {
+        return _totalBridgedAmount[token];
+    }
+
+    /// @inheritdoc ICCIPSenderReceiverMessaging
+    function getChainBridgedAmount(
+        address token,
+        uint64 chainSelector
+    ) external view returns (int256) {
+        return _chainBridgedAmount[token][chainSelector];
     }
 }
