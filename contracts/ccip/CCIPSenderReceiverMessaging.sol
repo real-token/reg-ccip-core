@@ -51,8 +51,7 @@ contract CCIPSenderReceiverMessaging is
     address[] private _tokensListHistory;
 
     // Token mapping: sourceToken => destinationChainSelector => destinationToken
-    mapping(address => mapping(uint64 => TokenMappingState))
-        private _tokenMappings;
+    mapping(address => mapping(uint64 => TokenMappingState)) private _tokenMappings;
 
     // Max bridging amount per token per chain
     mapping(address => mapping(uint64 => uint256)) private _chainMaxAmount;
@@ -67,9 +66,6 @@ contract CCIPSenderReceiverMessaging is
     constructor() {
         _disableInitializers();
     }
-
-    /// @notice Receive function to accept ETH
-    receive() external payable {}
 
     /// @notice Initializes the contract
     /// @param defaultAdmin The address of the default admin
@@ -108,23 +104,24 @@ contract CCIPSenderReceiverMessaging is
      * @notice The admin (with upgrader role) uses this function to update the contract
      * @dev This function is always needed in future implementation contract versions, otherwise, the contract will not be upgradeable
      * @param newImplementation is the address of the new implementation contract
-     **/
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {
+     *
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {
         // Intentionally left blank
     }
 
     /**
      * @dev Pause the contract if needed
-     **/
+     *
+     */
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
     /**
      * @dev Unpause the contract if needed
-     **/
+     *
+     */
     function unpause() external onlyRole(UNPAUSER_ROLE) {
         _unpause();
     }
@@ -134,13 +131,9 @@ contract CCIPSenderReceiverMessaging is
      * @param destinationChainSelector The selector of the destination chain
      */
     modifier onlyAllowlistedChain(uint64 destinationChainSelector) {
-        if (
-            _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver == address(0)
-        )
-            revert CCIPMessagingErrors.DestinationChainNotAllowlisted(
-                destinationChainSelector
-            );
+        if (_allowlistedChains[destinationChainSelector].destinationChainReceiver == address(0)) {
+            revert CCIPMessagingErrors.DestinationChainNotAllowlisted(destinationChainSelector);
+        }
         _;
     }
 
@@ -149,8 +142,9 @@ contract CCIPSenderReceiverMessaging is
      * @param token The token address
      */
     modifier onlyAllowlistedToken(address token) {
-        if (!_allowlistedTokens[token].isAllowed)
+        if (!_allowlistedTokens[token].isAllowed) {
             revert CCIPMessagingErrors.TokenNotAllowlisted(token);
+        }
         _;
     }
 
@@ -159,8 +153,9 @@ contract CCIPSenderReceiverMessaging is
      * @param contractAddress The contract address
      */
     modifier validateContractAddress(address contractAddress) {
-        if (!AddressUpgradeable.isContract(contractAddress))
+        if (!AddressUpgradeable.isContract(contractAddress)) {
             revert CCIPMessagingErrors.InvalidContractAddress();
+        }
         _;
     }
 
@@ -169,26 +164,26 @@ contract CCIPSenderReceiverMessaging is
      * @param receiver The receiver address
      */
     modifier validateReceiver(address receiver) {
-        if (receiver == address(0))
+        if (receiver == address(0)) {
             revert CCIPMessagingErrors.InvalidReceiverAddress();
+        }
         _;
     }
 
     /// @dev only calls from the set router are accepted.
     modifier onlyRouter() {
-        if (msg.sender != address(_router))
+        if (msg.sender != address(_router)) {
             revert CCIPMessagingErrors.InvalidRouter(msg.sender);
+        }
         _;
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function allowlistDestinationChain(
-        uint64 destinationChainSelector,
-        address destinationChainReceiver
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        AllowlistChainState storage chainState = _allowlistedChains[
-            destinationChainSelector
-        ];
+    function allowlistDestinationChain(uint64 destinationChainSelector, address destinationChainReceiver)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        AllowlistChainState storage chainState = _allowlistedChains[destinationChainSelector];
 
         if (chainState.destinationChainReceiver == destinationChainReceiver) {
             revert CCIPMessagingErrors.AllowedStateNotChange();
@@ -201,17 +196,15 @@ contract CCIPSenderReceiverMessaging is
             chainState.isInList = true;
         }
 
-        emit AllowlistDestinationChain(
-            destinationChainSelector,
-            destinationChainReceiver
-        );
+        emit AllowlistDestinationChain(destinationChainSelector, destinationChainReceiver);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function allowlistToken(
-        address token,
-        bool allowed
-    ) external validateContractAddress(token) onlyRole(DEFAULT_ADMIN_ROLE) {
+    function allowlistToken(address token, bool allowed)
+        external
+        validateContractAddress(token)
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         AllowlistTokenState storage tokenState = _allowlistedTokens[token];
 
         if (tokenState.isAllowed == allowed) {
@@ -228,9 +221,7 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function setRouter(
-        IRouterClient router
-    )
+    function setRouter(IRouterClient router)
         external
         override
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -248,29 +239,23 @@ contract CCIPSenderReceiverMessaging is
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 length = sourceTokens.length;
         if (length == 0) revert CCIPMessagingErrors.EmptyArray();
-        if (length != destinationTokens.length)
+        if (length != destinationTokens.length) {
             revert CCIPMessagingErrors.ArrayLengthMismatch();
+        }
 
-        for (uint256 i = 0; i < length; ) {
-            if (
-                sourceTokens[i] == address(0) ||
-                destinationTokens[i] == address(0)
-            ) revert CCIPMessagingErrors.ZeroAddress();
+        for (uint256 i = 0; i < length;) {
+            if (sourceTokens[i] == address(0) || destinationTokens[i] == address(0)) {
+                revert CCIPMessagingErrors.ZeroAddress();
+            }
 
-            TokenMappingState storage mappingState = _tokenMappings[
-                sourceTokens[i]
-            ][chainSelector];
+            TokenMappingState storage mappingState = _tokenMappings[sourceTokens[i]][chainSelector];
             mappingState.destinationToken = destinationTokens[i];
 
             if (!mappingState.isInList) {
                 mappingState.isInList = true;
             }
 
-            emit TokenMapped(
-                sourceTokens[i],
-                chainSelector,
-                destinationTokens[i]
-            );
+            emit TokenMapped(sourceTokens[i], chainSelector, destinationTokens[i]);
 
             unchecked {
                 ++i;
@@ -279,22 +264,17 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function removeMappedTokens(
-        uint64 chainSelector,
-        address[] calldata sourceTokens
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeMappedTokens(uint64 chainSelector, address[] calldata sourceTokens)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         uint256 length = sourceTokens.length;
         if (length == 0) revert CCIPMessagingErrors.EmptyArray();
 
-        for (uint256 i = 0; i < length; ) {
-            if (
-                _tokenMappings[sourceTokens[i]][chainSelector]
-                    .destinationToken == address(0)
-            )
-                revert CCIPMessagingErrors.TokenNotMapped(
-                    sourceTokens[i],
-                    chainSelector
-                );
+        for (uint256 i = 0; i < length;) {
+            if (_tokenMappings[sourceTokens[i]][chainSelector].destinationToken == address(0)) {
+                revert CCIPMessagingErrors.TokenNotMapped(sourceTokens[i], chainSelector);
+            }
 
             delete _tokenMappings[sourceTokens[i]][chainSelector]
                 .destinationToken;
@@ -308,19 +288,20 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function setMaxChainAmount(
-        uint64 chainSelector,
-        address[] calldata tokens,
-        uint256[] calldata amounts
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setMaxChainAmount(uint64 chainSelector, address[] calldata tokens, uint256[] calldata amounts)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         uint256 length = tokens.length;
         if (length == 0) revert CCIPMessagingErrors.EmptyArray();
-        if (length != amounts.length)
+        if (length != amounts.length) {
             revert CCIPMessagingErrors.ArrayLengthMismatch();
+        }
 
-        for (uint256 i = 0; i < length; ) {
-            if (tokens[i] == address(0))
+        for (uint256 i = 0; i < length;) {
+            if (tokens[i] == address(0)) {
                 revert CCIPMessagingErrors.ZeroAddress();
+            }
             if (amounts[i] == 0) revert CCIPMessagingErrors.ZeroAmount();
 
             _chainMaxAmount[tokens[i]][chainSelector] = amounts[i];
@@ -334,16 +315,17 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function removeMaxChainAmount(
-        uint64 chainSelector,
-        address[] calldata tokens
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeMaxChainAmount(uint64 chainSelector, address[] calldata tokens)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         uint256 length = tokens.length;
         if (length == 0) revert CCIPMessagingErrors.EmptyArray();
 
-        for (uint256 i = 0; i < length; ) {
-            if (_chainMaxAmount[tokens[i]][chainSelector] == 0)
+        for (uint256 i = 0; i < length;) {
+            if (_chainMaxAmount[tokens[i]][chainSelector] == 0) {
                 revert CCIPMessagingErrors.ZeroAmount();
+            }
 
             delete _chainMaxAmount[tokens[i]][chainSelector];
 
@@ -356,9 +338,7 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function withdraw(
-        address beneficiary
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdraw(address beneficiary) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = address(this).balance;
 
@@ -370,20 +350,13 @@ contract CCIPSenderReceiverMessaging is
         (bool sent, bytes memory data) = beneficiary.call{value: amount}("");
 
         // Revert if the send failed, with information about the attempted transfer
-        if (!sent)
-            revert CCIPMessagingErrors.FailedToWithdrawEth(
-                msg.sender,
-                beneficiary,
-                amount,
-                data
-            );
+        if (!sent) {
+            revert CCIPMessagingErrors.FailedToWithdrawEth(msg.sender, beneficiary, amount, data);
+        }
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function withdrawToken(
-        address beneficiary,
-        IERC20 token
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdrawToken(address beneficiary, IERC20 token) external onlyRole(DEFAULT_ADMIN_ROLE) {
         // Retrieve the balance of this contract
         uint256 amount = token.balanceOf(address(this));
 
@@ -402,15 +375,7 @@ contract CCIPSenderReceiverMessaging is
         address feeToken,
         uint256 gasLimit
     ) external payable override returns (bytes32 messageId) {
-        return
-            _transferTokens(
-                destinationChainSelector,
-                receiver,
-                token,
-                amount,
-                feeToken,
-                gasLimit
-            );
+        return _transferTokens(destinationChainSelector, receiver, token, amount, feeToken, gasLimit);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
@@ -426,24 +391,8 @@ contract CCIPSenderReceiverMessaging is
         bytes32 r,
         bytes32 s
     ) external payable override returns (bytes32 messageId) {
-        IERC20WithPermit(token).permit(
-            msg.sender,
-            address(this),
-            amount,
-            deadline,
-            v,
-            r,
-            s
-        );
-        return
-            _transferTokens(
-                destinationChainSelector,
-                receiver,
-                token,
-                amount,
-                feeToken,
-                gasLimit
-            );
+        IERC20WithPermit(token).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        return _transferTokens(destinationChainSelector, receiver, token, amount, feeToken, gasLimit);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
@@ -462,38 +411,22 @@ contract CCIPSenderReceiverMessaging is
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getAllowlistedDestinationChains()
-        external
-        view
-        override
-        returns (uint64[] memory)
-    {
+    function getAllowlistedDestinationChains() external view override returns (uint64[] memory) {
         return _chainsListHistory;
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getAllowlistedTokens()
-        external
-        view
-        override
-        returns (address[] memory)
-    {
+    function getAllowlistedTokens() external view override returns (address[] memory) {
         return _tokensListHistory;
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function isAllowlistedDestinationChain(
-        uint64 destinationChainSelector
-    ) external view override returns (bool) {
-        return
-            _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver != address(0);
+    function isAllowlistedDestinationChain(uint64 destinationChainSelector) external view override returns (bool) {
+        return _allowlistedChains[destinationChainSelector].destinationChainReceiver != address(0);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function isAllowlistedToken(
-        address token
-    ) external view override returns (bool) {
+    function isAllowlistedToken(address token) external view override returns (bool) {
         return _allowlistedTokens[token].isAllowed;
     }
 
@@ -527,11 +460,7 @@ contract CCIPSenderReceiverMessaging is
         returns (bytes32 messageId)
     {
         // Check if the fee token is LINK or 0 (native gas) or wrapped native token
-        if (
-            feeToken != address(0) &&
-            feeToken != _linkToken &&
-            feeToken != _wrappedNativeToken
-        ) {
+        if (feeToken != address(0) && feeToken != _linkToken && feeToken != _wrappedNativeToken) {
             revert CCIPMessagingErrors.InvalidFeeToken(feeToken);
         }
 
@@ -542,35 +471,19 @@ contract CCIPSenderReceiverMessaging is
         CCIPMessageParams memory params = CCIPMessageParams({
             receiver: receiver,
             sourceToken: token,
-            destToken: _tokenMappings[token][destinationChainSelector]
-                .destinationToken,
+            destToken: _tokenMappings[token][destinationChainSelector].destinationToken,
             amount: amount,
             feeToken: feeToken,
-            ccipReceiver: _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver,
+            ccipReceiver: _allowlistedChains[destinationChainSelector].destinationChainReceiver,
             gasLimit: gasLimit
         });
 
         // Get the fee and send message
         uint256 fees;
-        (messageId, fees) = _burnAndSendCCIP(
-            destinationChainSelector,
-            token,
-            amount,
-            feeToken,
-            params
-        );
+        (messageId, fees) = _burnAndSendCCIP(destinationChainSelector, token, amount, feeToken, params);
 
         // Emit an event with message details
-        emit TokensTransferred(
-            messageId,
-            destinationChainSelector,
-            receiver,
-            token,
-            amount,
-            feeToken,
-            fees
-        );
+        emit TokensTransferred(messageId, destinationChainSelector, receiver, token, amount, feeToken, fees);
     }
 
     /**
@@ -579,14 +492,11 @@ contract CCIPSenderReceiverMessaging is
      * @param chainSelector The destination chain selector
      * @param amount The amount to bridge
      */
-    function _validateBridgeLimits(
-        address token,
-        uint64 chainSelector,
-        uint256 amount
-    ) private view {
+    function _validateBridgeLimits(address token, uint64 chainSelector, uint256 amount) private view {
         // Check token mapping exists
-        if (_tokenMappings[token][chainSelector].destinationToken == address(0))
+        if (_tokenMappings[token][chainSelector].destinationToken == address(0)) {
             revert CCIPMessagingErrors.TokenNotMapped(token, chainSelector);
+        }
 
         // Check max bridged amount if limit is set
         uint256 maxAmount = _chainMaxAmount[token][chainSelector];
@@ -596,11 +506,7 @@ contract CCIPSenderReceiverMessaging is
             // This means: amount - currentBridged <= maxAmount (after rearranging)
             if (int256(amount) - currentBridged > int256(maxAmount)) {
                 revert CCIPMessagingErrors.MaxBridgedAmountExceeded(
-                    token,
-                    chainSelector,
-                    currentBridged,
-                    amount,
-                    maxAmount
+                    token, chainSelector, currentBridged, amount, maxAmount
                 );
             }
         }
@@ -639,12 +545,7 @@ contract CCIPSenderReceiverMessaging is
         _totalBridgedAmount[token] -= int256(amount);
 
         // Handle fee payment and send message
-        messageId = _handleFeesAndSend(
-            chainSelector,
-            feeToken,
-            fees,
-            evm2AnyMessage
-        );
+        messageId = _handleFeesAndSend(chainSelector, feeToken, fees, evm2AnyMessage);
     }
 
     /**
@@ -662,43 +563,29 @@ contract CCIPSenderReceiverMessaging is
         Client.EVM2AnyMessage memory evm2AnyMessage
     ) private returns (bytes32 messageId) {
         if (feeToken == address(0)) {
-            messageId = _handleNativeFeeAndSend(
-                chainSelector,
-                fees,
-                evm2AnyMessage
-            );
+            messageId = _handleNativeFeeAndSend(chainSelector, fees, evm2AnyMessage);
         } else {
-            messageId = _handleTokenFeeAndSend(
-                chainSelector,
-                feeToken,
-                fees,
-                evm2AnyMessage
-            );
+            messageId = _handleTokenFeeAndSend(chainSelector, feeToken, fees, evm2AnyMessage);
         }
     }
 
     /**
      * @notice Handles native fee payment and sends CCIP message
      */
-    function _handleNativeFeeAndSend(
-        uint64 chainSelector,
-        uint256 fees,
-        Client.EVM2AnyMessage memory evm2AnyMessage
-    ) private returns (bytes32 messageId) {
+    function _handleNativeFeeAndSend(uint64 chainSelector, uint256 fees, Client.EVM2AnyMessage memory evm2AnyMessage)
+        private
+        returns (bytes32 messageId)
+    {
         // Check if msg.value is enough to pay for the fees
-        if (fees > msg.value)
+        if (fees > msg.value) {
             revert CCIPMessagingErrors.NotEnoughBalance(msg.value, fees);
+        }
         // If the user sent more than the required fees, send the excess back
         if (msg.value > fees) {
-            (bool sent, bytes memory data) = msg.sender.call{
-                value: msg.value - fees
-            }("");
+            (bool sent, bytes memory data) = msg.sender.call{value: msg.value - fees}("");
             if (!sent) revert CCIPMessagingErrors.FailedToRefund(data);
         }
-        messageId = _router.ccipSend{value: fees}(
-            chainSelector,
-            evm2AnyMessage
-        );
+        messageId = _router.ccipSend{value: fees}(chainSelector, evm2AnyMessage);
     }
 
     /**
@@ -727,27 +614,19 @@ contract CCIPSenderReceiverMessaging is
      * @param params The CCIPMessageParams struct containing all message parameters
      * @return Client.EVM2AnyMessage Returns an EVM2AnyMessage struct which contains information for sending a CCIP message
      */
-    function _buildCCIPMessage(
-        CCIPMessageParams memory params
-    ) private pure returns (Client.EVM2AnyMessage memory) {
+    function _buildCCIPMessage(CCIPMessageParams memory params) private pure returns (Client.EVM2AnyMessage memory) {
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        return
-            Client.EVM2AnyMessage({
-                receiver: abi.encode(params.ccipReceiver), // ABI-encoded receiver address
-                data: abi.encode(
-                    params.sourceToken,
-                    params.destToken,
-                    params.amount,
-                    params.receiver
-                ), // Encode with source token, dest token, amount, and receiver
-                tokenAmounts: new Client.EVMTokenAmount[](0), // Empty array as no tokens are transferred
-                extraArgs: Client._argsToBytes(
-                    // Setting gas limit for action on destination chain
-                    Client.EVMExtraArgsV1({gasLimit: params.gasLimit})
-                ),
-                // Set the feeToken to a feeToken, indicating specific asset will be used for fees
-                feeToken: params.feeToken
-            });
+        return Client.EVM2AnyMessage({
+            receiver: abi.encode(params.ccipReceiver), // ABI-encoded receiver address
+            data: abi.encode(params.sourceToken, params.destToken, params.amount, params.receiver), // Encode with source token, dest token, amount, and receiver
+            tokenAmounts: new Client.EVMTokenAmount[](0), // Empty array as no tokens are transferred
+            extraArgs: Client._argsToBytes(
+                // Setting gas limit for action on destination chain
+                Client.EVMExtraArgsV1({gasLimit: params.gasLimit})
+            ),
+            // Set the feeToken to a feeToken, indicating specific asset will be used for fees
+            feeToken: params.feeToken
+        });
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
@@ -762,16 +641,13 @@ contract CCIPSenderReceiverMessaging is
         CCIPMessageParams memory params = CCIPMessageParams({
             receiver: receiver,
             sourceToken: token,
-            destToken: _tokenMappings[token][destinationChainSelector]
-                .destinationToken,
+            destToken: _tokenMappings[token][destinationChainSelector].destinationToken,
             amount: amount,
             feeToken: feeToken,
-            ccipReceiver: _allowlistedChains[destinationChainSelector]
-                .destinationChainReceiver,
+            ccipReceiver: _allowlistedChains[destinationChainSelector].destinationChainReceiver,
             gasLimit: gasLimit
         });
-        return
-            _router.getFee(destinationChainSelector, _buildCCIPMessage(params));
+        return _router.getFee(destinationChainSelector, _buildCCIPMessage(params));
     }
 
     //**************************************** Receiver Logic starts here ****************************************/
@@ -786,48 +662,30 @@ contract CCIPSenderReceiverMessaging is
     /// If this returns true, tokens are transferred and ccipReceive is called atomically.
     /// Additionally, if the receiver address does not have code associated with
     /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override returns (bool) {
-        return
-            interfaceId == type(IAny2EVMMessageReceiver).interfaceId ||
-            super.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /// @inheritdoc IAny2EVMMessageReceiver
-    function ccipReceive(
-        Client.Any2EVMMessage calldata message
-    ) external override whenNotPaused onlyRouter {
+    function ccipReceive(Client.Any2EVMMessage calldata message) external override whenNotPaused onlyRouter {
         // Handle the received message, emit event with all information for subgraph to index
         bytes32 messageId = message.messageId; // fetch the messageId
         uint64 sourceChainSelector = message.sourceChainSelector; // fetch the source chain selector
         address sender = abi.decode(message.sender, (address)); // abi-decoding of the CCIPSender address
 
         // Decode the new message format: (sourceToken, destToken, amount, receiver)
-        (
-            address sourceToken,
-            address destToken,
-            uint256 amount,
-            address receiver
-        ) = abi.decode(message.data, (address, address, uint256, address));
+        (address sourceToken, address destToken, uint256 amount, address receiver) =
+            abi.decode(message.data, (address, address, uint256, address));
 
         // Validate the sender is allowlisted
-        if (
-            _allowlistedChains[sourceChainSelector].destinationChainReceiver !=
-            sender
-        ) {
+        if (_allowlistedChains[sourceChainSelector].destinationChainReceiver != sender) {
             revert CCIPMessagingErrors.InvalidSender(sender);
         }
 
         // Verify the token mapping is correct (source token from sender chain should map to destToken here)
-        address expectedSourceToken = _tokenMappings[destToken][
-            sourceChainSelector
-        ].destinationToken;
+        address expectedSourceToken = _tokenMappings[destToken][sourceChainSelector].destinationToken;
         if (expectedSourceToken != sourceToken) {
-            revert CCIPMessagingErrors.TokenNotMapped(
-                destToken,
-                sourceChainSelector
-            );
+            revert CCIPMessagingErrors.TokenNotMapped(destToken, sourceChainSelector);
         }
 
         // Mint the destination token to the receiver
@@ -838,54 +696,31 @@ contract CCIPSenderReceiverMessaging is
         _totalBridgedAmount[destToken] += int256(amount);
 
         // Emit an event with the message details
-        emit TokensReceived(
-            messageId,
-            sourceChainSelector,
-            sender,
-            receiver,
-            destToken,
-            amount
-        );
+        emit TokensReceived(messageId, sourceChainSelector, sender, receiver, destToken, amount);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getMappedToken(
-        address sourceToken,
-        uint64 chainSelector
-    ) external view returns (address) {
+    function getMappedToken(address sourceToken, uint64 chainSelector) external view returns (address) {
         return _tokenMappings[sourceToken][chainSelector].destinationToken;
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function isTokenMapped(
-        address sourceToken,
-        uint64 chainSelector
-    ) external view returns (bool) {
-        return
-            _tokenMappings[sourceToken][chainSelector].destinationToken !=
-            address(0);
+    function isTokenMapped(address sourceToken, uint64 chainSelector) external view returns (bool) {
+        return _tokenMappings[sourceToken][chainSelector].destinationToken != address(0);
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getMaxChainAmount(
-        address token,
-        uint64 chainSelector
-    ) external view returns (uint256) {
+    function getMaxChainAmount(address token, uint64 chainSelector) external view returns (uint256) {
         return _chainMaxAmount[token][chainSelector];
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getTotalBridgedAmount(
-        address token
-    ) external view returns (int256) {
+    function getTotalBridgedAmount(address token) external view returns (int256) {
         return _totalBridgedAmount[token];
     }
 
     /// @inheritdoc ICCIPSenderReceiverMessaging
-    function getChainBridgedAmount(
-        address token,
-        uint64 chainSelector
-    ) external view returns (int256) {
+    function getChainBridgedAmount(address token, uint64 chainSelector) external view returns (int256) {
         return _chainBridgedAmount[token][chainSelector];
     }
 }

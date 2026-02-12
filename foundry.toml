@@ -47,9 +47,9 @@ remappings = [
 runs = 10000
 
 [invariant]
-runs = 128
+runs = 1024
 depth = 32
-fail_on_revert = false
+fail_on_revert = true
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
